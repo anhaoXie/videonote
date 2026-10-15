@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>VideoNote · 视频学习工作台</title>
+<link rel="stylesheet" href="./style.css?v=0.3.0" />
+</head>
+<body>
+<div id="boot-error" class="conn-banner" hidden></div>
+<script>
+  // 启动失败自检：如果脚本没跑起来（多半是浏览器缓存了旧文件），必须让用户看得见，
+  // 而不是页面看着正常、点哪儿都没反应。
+  (function () {
+    function show(msg) {
+      var el = document.getElementById('boot-error');
+      if (el) { el.hidden = false; el.innerHTML = msg; }
+    }
+    window.addEventListener('error', function (e) {
+      show('⚠ 页面脚本报错：' + (e.message || e.type) +
+        ' &nbsp;<button class="btn small" onclick="location.reload(true)">强制重新加载</button>');
+    });
+    window.addEventListener('unhandledrejection', function (e) {
+      var m = (e.reason && e.reason.message) || e.reason || '未知错误';
+      show('⚠ 有操作失败：' + m +
+        ' &nbsp;<button class="btn small" onclick="location.reload(true)">强制重新加载</button>');
+    });
+    setTimeout(function () {
+      if (!window.VN) {
+        show('⚠ 页面没有启动成功 —— 多半是浏览器缓存了旧脚本。' +
+          '请按 <b>Ctrl + Shift + R</b> 强制刷新，或用无痕窗口打开。' +
+          ' <button class="btn small" onclick="location.reload(true)">现在就强制刷新</button>');
+      }
+    }, 4000);
+  })();
+</script>
+<aside class="sidebar">
+  <div class="brand">
+    <span class="logo">◈</span>
+    <div>
+      <div class="brand-name">VideoNote</div>
+      <div class="brand-sub">视频学习工作台 <span id="version"></span></div>
+    </div>
+  </div>
+
+  <button class="btn primary block" id="btn-new">＋ 导入视频</button>
+
+  <div class="side-section">
+    <div class="side-title">项目 <span id="proj-count" class="pill">0</span></div>
+    <div id="project-list" class="project-list"></div>
+  </div>
+
+  <div class="side-section grow">
+    <div class="side-title">任务</div>
+    <div id="job-list" class="job-list"></div>
+  </div>
+
+  <div class="side-foot">
+    <span id="engine-badge" class="badge">引擎加载中…</span>
+  </div>
+</aside>
+
+<main class="main">
+  <header class="topbar">
+    <div class="topbar-left">
+      <h1 id="project-title">未选择项目</h1>
+      <span id="project-meta" class="muted"></span>
+    </div>
+    <div class="topbar-right">
+      <select id="job-kind" class="select" title="选择任务类型"></select>
+      <button class="btn" id="btn-run">▶ 开始分析</button>
+      <button class="btn ghost" id="btn-refresh" title="刷新">⟳</button>
+    </div>
+  </header>
+
+  <nav class="tabs" id="tabs"></nav>
+
+  <div class="conn-banner" id="conn-banner" hidden></div>
+
+  <div class="progress-wrap" id="progress-wrap" hidden>
+    <div class="progress"><div class="progress-bar" id="progress-bar"></div></div>
+    <div class="progress-text"><span id="progress-stage"></span><span id="progress-msg"></span></div>
+  </div>
+
+  <section class="content" id="content">
+    <div class="empty">
+      <h2>把视频丢进来，剩下的交给它</h2>
+      <p class="muted">语音识别 · 画面分析 · 摘要笔记 · 自动字幕 · 逐句跟读</p>
+      <div class="empty-actions">
+        <button class="btn primary" id="btn-new2">导入本地视频</button>
+      </div>
+      <div class="hint" id="startup-hint"></div>
+    </div>
+  </section>
+</main>
+
+<div class="modal-backdrop" id="modal" hidden>
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="modal-title">导入视频</h3>
+      <button class="btn ghost" id="modal-close">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label>方式</label>
+        <div class="seg" id="import-mode">
+          <button class="seg-btn active" data-mode="upload">本地上传</button>
+          <button class="seg-btn" data-mode="path">本机路径</button>
+          <button class="seg-btn" data-mode="url">视频链接</button>
+        </div>
+      </div>
+      <div class="field" data-pane="upload">
+        <label>选择视频文件</label>
+        <input type="file" id="file-input" accept="video/*,audio/*" />
+        <div class="upload-bar" id="upload-bar" hidden><div id="upload-fill"></div></div>
+        <div class="hint">大文件建议直接选，浏览器会显示上传进度。</div>
+      </div>
+      <div class="field" data-pane="path" hidden>
+        <label>本机文件绝对路径</label>
+        <div class="row" style="gap:8px;flex-wrap:nowrap">
+          <input type="text" id="path-input" placeholder="点右边「浏览」选文件，或直接粘贴路径" />
+          <button class="btn" id="fs-open" style="white-space:nowrap">📁 浏览</button>
+        </div>
+        <div class="hint">不复制文件、立刻开始 —— 大视频推荐用这种方式。</div>
+        <div id="fs-browser" class="fs-browser" hidden></div>
+      </div>
+      <div class="field" data-pane="url" hidden>
+        <label>视频链接</label>
+        <input type="text" id="url-input" placeholder="https://www.bilibili.com/video/BV..." />
+        <div class="hint">用 yt-dlp 下载，支持 B站 / YouTube 等上千个站点。</div>
+      </div>
+      <div class="field">
+        <label>标题（可留空自动取）</label>
+        <input type="text" id="title-input" placeholder="例如：老友记 S01E01" />
+      </div>
+      <div class="field">
+        <label>导入后立即执行</label>
+        <select id="import-job" class="select block"></select>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn ghost" id="modal-cancel">取消</button>
+      <button class="btn primary" id="modal-ok">开始</button>
+    </div>
+  </div>
+</div>
+
+<div class="toasts" id="toasts"></div>
+
+<script type="module" src="./app.js?v=0.3.0"></script>
+</body>
+</html>

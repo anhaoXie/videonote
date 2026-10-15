@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.pyc
+data/
+*.log
+.env
+.DS_Store
+
+# pip / torch 在项目根目录留下的临时目录（安装依赖时产生，不是项目内容）
+pip-*/
+pip-wheels/
+torchinductor_*/
+tmp*/

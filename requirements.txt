@@ -1,0 +1,36 @@
+# ---- core web ----
+fastapi>=0.115
+uvicorn[standard]>=0.30
+python-multipart>=0.0.9
+jinja2>=3.1
+httpx>=0.27
+python-dotenv>=1.0
+
+# ---- media / asr ----
+faster-whisper>=1.0.3          # CPU int8 via CTranslate2, ships PyAV for decoding
+numpy>=1.26
+opencv-python-headless>=4.9    # scene detect / keyframes (no GUI deps)
+Pillow>=10.0
+imageio-ffmpeg>=0.5            # bundles a static ffmpeg.exe -> no manual install
+yt-dlp>=2024.8.6               # video link import
+
+# ---- 发音训练：词级打分 + 间隔重复 ----
+# 词级打分只用 faster-whisper（上面已有），复习队列是纯 Python（无依赖）。
+# Anki 导出需要 genanki（可选）。
+
+# ---- 发音训练：音素级评测（可选但强烈推荐）----
+# 有了这三个包，「跟读评分」才能告诉你「是哪个音发错了」。
+# 模型文件（1.2GB）用 tools/get_phoneme_model.py 单独下载。
+#   pip install -i https://pypi.tuna.tsinghua.edu.cn/simple transformers espeakng-loader cmudict safetensors
+# 注意：transformers 必须能和已装的 huggingface-hub 2.x 配套（5.x 可以，4.x 要求 hub<1.0）。
+transformers>=5.0              # Wav2Vec2ForCTC / Wav2Vec2CTCTokenizer
+espeakng-loader>=0.2.4         # 自带 libespeak-ng.dll：文本 -> IPA 音标（不用装 msi/conda）
+cmudict>=1.1                   # CMU 发音词典：espeak 取不到时的纯 Python 兜底
+safetensors>=0.8
+
+# ---- 说话人分离（可选）----
+# speechbrain>=1.1 / torch (CPU) / scikit-learn：本地声纹聚类，标注每句谁说的
+
+# ---- 其他可选 ----
+# genanki>=0.13                # 导出 Anki 牌组（.apkg，带音频）
+# rapidocr-onnxruntime>=1.3    # 画面硬字幕 OCR（中英），CPU 友好
