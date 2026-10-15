@@ -20,6 +20,9 @@
      │      ├─▶ asr ──▶ [transcript]        faster-whisper 或云端 → 逐句时间轴 + words
      │      │                          └─▶ segments 表（播放器/跟读/字幕/搜索都查它）
      │      ├─▶ diarize ──▶ [diarization]   ECAPA 声纹(滑窗) + 层次聚类 → 每句标说话人
+     │      │                              同时产出 windows 窗口级时间线（说话人时间轴）
+     │      ├─▶ split_speakers ──▶ [split_report]  按词级时间戳把「多人被合成一句」切开
+     │      │                              ⚠ 句号重排：clips/scores/reviews/译文 自动迁移，先备份数据库
      │      ├─▶ notes ──▶ [notes, summary]  map-reduce 大模型摘要（含画面描述）；无 key 退回抽取式
      │      ├─▶ translate ──▶ [translation] 逐句翻译（双语字幕）
      │      ├─▶ subtitles ──▶ [srt/vtt]     SRT/VTT 导出
@@ -28,6 +31,7 @@
      │      └─▶ captions ──▶ [frames_captioned]  视觉大模型描述每帧 → 写回 frames + 进笔记
      └─▶（训练侧，不走任务队列，HTTP 直调）
             score   : 录音 → 解码 → Whisper 回环 → 逐词对齐 → 分数（routes_practice.py）
+            words   : 合成音 + 你的录音 → 音素判定 → pair_drills（流水）+ word_reviews（调度）
             clips   : 收藏句子 → ffmpeg 切音频/视频 → clips 表 + Anki 导出（routes_clips.py）
 ```
 
@@ -55,7 +59,7 @@
 
 ## 3. 数据库
 
-SQLite（`data/videonote.db`，WAL 模式），5 张表：
+SQLite（`data/videonote.db`，WAL 模式），11 张表：
 
 | 表 | 说明 |
 | --- | --- |
@@ -69,8 +73,14 @@ SQLite（`data/videonote.db`，WAL 模式），5 张表：
 | `reviews` | 复习队列（SM-2）：`ease / interval_days / reps / lapses / due_at / status`，`(project_id, seg_idx)` 唯一 |
 | `practice_log` | 训练流水：每次评分一行（`kind / score / seconds / day`），统计页的数据源 |
 | `pair_drills` | 单词训练流水：`pair_id / word / kind(listen|say) / correct / score / detail` |
+| `word_reviews` | 单词卡的复习调度（SM-2）：`(pair_id, word)` 唯一。**粒度是"词对+具体单词"而不是词对** —— 同一个 iː/ɪ 里你可能读得对 `sheep`、读不对 `ship` |
 
 加字段很随意：`ALTER TABLE` 或在 `db.py` 的 `SCHEMA` 里加一行（首次创建时生效）。
+
+**多条写操作需要原子性时用 `db.transaction()`**（不要直接调 `db.execute()` —— 它每次都 commit，
+会把事务提前截断）。唯一非它不可的场景是**段落改号**：那种操作要同时重写 `segments` 并重映射
+`clips`/`scores`/`reviews`/`practice_log`，中途失败会留下「句子已换号、句库还指着旧号」的
+静默错位状态，比干脆不做更糟。
 
 ---
 
@@ -88,11 +98,15 @@ SQLite（`data/videonote.db`，WAL 模式），5 张表：
                     └─────────────┬──────────────┘
                                   ▼
                        ③ 复习调度（core/srs.py）
-              分数 <80 自动进队列；SM-2 决定下次什么时候来
+              句子：分数 <80 或收藏过 → 自动进 reviews
+              单词：关键音读错必进 word_reviews（粒度 = 词对 + 具体单词）
                                   │
                                   ▼
-                       ④ 统计（core/analytics.py）
-         趋势 / 打卡 / 高频漏词 / 高频错音 / 最该重练的句子 / 复习负载
+                       ④ 统一今日队列（srs.unified_queue）—— 两张表按比率交错
+                                   │
+                                   ▼
+                       ⑤ 统计（core/analytics.py）
+         趋势 / 打卡 / 高频漏词 / 高频错音 / 最该重练的句子 / 复习负载 / 单词进度
 ```
 
 设计要点：
@@ -110,6 +124,18 @@ SQLite（`data/videonote.db`，WAL 模式），5 张表：
   所以参考音用 espeak 现场合成（`core/tts.py`，离线零成本）。但**判定永远依据 IPA 目标 + 用户自己的录音**，
   因为音素模型在"机器人念孤立单词"上属于域外数据（实测 35 对里只有 13 对能被模型确认分辨）。
   这 13 对用于「听音辨词」（分辨不出就不该出题），全部 35 对用于「跟读对比」。
+* **统一队列是"视图"不是"表"**：句子（`reviews`，键 `(project_id, seg_idx)`）和单词
+  （`word_reviews`，键 `(pair_id, word)`）根本没有共同的键。硬塞进一张表要么放宽唯一约束
+  弄脏句子语义，要么加一列可空字段、处处判空。所以两张表各管一种卡，
+  `srs.unified_queue()` 在**读取时**按比率交错合并，每一项带 `card_type` 供前端分流。
+* **关键音优先于整词准确率**：`think` 读成 `sink` 时整词准确率仍有 50%，用整词分会让读错的人
+  "过关"。所以关键音错了就把分数封顶到 40（`srs.KEY_PHONE_MISS_CAP`），必然落回「还在学」。
+* **句子序号是隐式外键**：`clips` / `scores` / `reviews` / `practice_log` 都按
+  `(project_id, seg_idx)` 存数据。任何**重排句子**的操作都必须同时迁移它们 ——
+  见 `core/split.py` 的 `migrate()`（在 `db.transaction()` 里一次改完，并先把库备份到
+  `data/backups/`）。落位规则刻意分成两种，因为它们回答的问题不同：
+  **句库按自己的时间区间**（clip 自带 start/end，重叠最长的那段就是它；切片文件因此仍然有效），
+  **评分/复习按最长子句**（那是原句的主体，用户在上面练的时间最久）。
 
 ---
 
@@ -148,12 +174,18 @@ SQLite（`data/videonote.db`，WAL 模式），5 张表：
 | POST | `/api/reviews/sync` | 把历史低分句和收藏句补进队列（幂等） |
 | POST | `/api/projects/{pid}/reviews` | 手动把某句加入复习 |
 | POST | `/api/reviews/{rid}/grade|snooze|suspend|reset` | 评分推进调度 / 明天再说 / 暂停 / 重置 |
+| GET/POST | `/api/reviews/words` · `/api/reviews/words/sync` | 单词卡队列 / 把历史练砸的词补进队列（幂等） |
+| POST | `/api/reviews/words/{wrid}/grade\|snooze\|suspend` · DELETE `/api/reviews/words/{wrid}` | 单词卡的调度操作（复习页单词卡用） |
 | GET | `/api/analytics?project_id=&days=` | 训练统计全量（趋势/分布/高频漏词/高频错音/最差句子/复习负载） |
 | GET | `/api/words/pairs` · `/groups` · `/plan` | 最小对立对词库 / 分组 / 按你的错音排出来的训练计划 |
 | GET | `/api/words/audio?word=&slow=` | espeak 合成单词音频（离线、缓存到 `data/tts/`） |
 | POST | `/api/words/listen` | 听音辨词记账 |
 | POST | `/api/words/say` | 跟读一个词 → 音素级判定（关键音读对没有） |
 | POST | `/api/projects/{pid}/shadow/analyze` | **影子跟读分析**：覆盖率 / 平均滞后 / 逐句跟丢情况 |
+
+> **「按说话人拆句」不是新接口**，而是 `POST /api/projects/{pid}/jobs` 的一个 `kind`
+> （`split_speakers`）。因为它会重排句子编号，所以做成显式任务、由用户在「概览」页点，
+> 而不是挂在 `diarize` 后面自动跑 —— 用户该知道自己在做什么。
 
 ---
 

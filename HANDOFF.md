@@ -1,9 +1,13 @@
 # VideoNote 交接报告（给下一个对话）
 
-> 生成时间：2026-10-15 17:30（Asia/Shanghai）
+> 初版生成时间：2026-10-15 17:30（Asia/Shanghai）
+> **v0.4 更新：2026-10-15 17:55** —— 第 1 节的快照已按 v0.4 修正；正文其余部分（架构、命令、
+> 限制清单）基本仍然有效，但「已完成到什么程度」请以 `ROADMAP.md` 为准。
 > 项目根目录：`C:\Users\谢安豪\Documents\deepseek-harness\default-workspace\videonote`
-> **这不是 git 仓库**（没有版本控制）——改动前请自行备份，或先 `git init`。
-> 本文档由上一轮会话写成，所有数字都是**实测值**；不确定的地方明确标注了"未验证"。
+> **已经是 git 仓库了**：v0.4 开工时 `git init` 并提交了基线（`c10ed3d` → `5fdd24d`）。
+> 改动前先看 `git status` —— 它能暴露「另一个会话同时也在改这个项目」这类**静默覆盖**，
+> 而这在 v0.4 期间真实发生过（另一个会话写入了 `HANDOFF.md` 与 `reset_practice_data.py`）。
+> 本文档由 v0.3 那一轮会话写成，数字都是**实测值**；v0.4 的两节由接手的那一轮补充。
 
 ---
 
@@ -17,7 +21,14 @@
 技术选型：Windows 11 + **纯 CPU**（i5-13420H / 16GB / 无独显）、Python 3.12.6、
 FastAPI + SQLite、原生 ES Module 前端（**无构建步骤**）、插件化后端。
 
-代码规模：Python **8256 行**（48 个文件）+ 前端 JS/CSS **3544 行**（15 个文件）。
+代码规模：Python **8256 行**（48 个文件）+ 前端 JS/CSS **3544 行**（15 个文件）。（v0.3 时的口径。）
+
+> ⚠️ v0.4 更新：上面这组数字**没能复现** —— 按「后端包 `videonote/` 下的全部 `.py`」
+> 重新量是 **7205 行 / 49 个文件**（同口径下 v0.3 不可能比它多 1000 行，所以两者口径不同，
+> 不要直接相减）。v0.4 确定新增的是：`videonote/core/split.py`（415 行）、
+> `videonote/pipeline/split_speakers.py`（59 行）、`tools/test_split_speakers.py`（259 行）、
+> `tools/test_hybrid_queue.py`（216 行）。其余分项：`tools/` 2804 行 / 37 个文件、
+> 前端 `web/` 3249 行 / 15 个文件。
 
 ---
 
@@ -25,17 +36,18 @@ FastAPI + SQLite、原生 ES Module 前端（**无构建步骤**）、插件化�
 
 | 项 | 值 |
 | --- | --- |
-| 版本号 | **0.3.0**（`videonote/__init__.py`） |
+| 版本号 | **0.4.0**（`videonote/__init__.py`） |
 | 服务地址 | `http://127.0.0.1:8756`（健康检查 `GET /api/health` → `{ok,version,worker_busy}`） |
-| 服务是否在跑 | 是（上一轮启动的后台任务；**会话结束会被系统回收**） |
+| 服务是否在跑 | 是（v0.4 接手的会话启动的后台任务；**会话结束会被系统回收**） |
 | 插件加载错误 | `{}`（零错误） |
-| 已注册阶段 | 10 个：`asr audio burn captions diarize frames ingest notes subtitles translate` |
-| 任务类型 | 11 种：`analyze analyze_plus burn captions diarize frames ingest subtitle_full summarize transcribe translate` |
+| 已注册阶段 | 11 个：`asr audio burn captions diarize frames ingest notes split_speakers subtitles translate` |
+| 任务类型 | 12 种：`analyze analyze_plus burn captions diarize frames ingest split_speakers subtitle_full summarize transcribe translate` |
 | Provider | asr `[cloud, local]`、llm `[deepseek, none, openai_compat]`、vision `[local_opencv, vlm]`、diarize `[local_ecapa, pyannote]` |
 | 数据表 | `projects segments artifacts jobs job_logs clips scores reviews practice_log pair_drills word_reviews` |
 | 项目数 | 3 个（见下表） |
-| 练习数据 | **已全部清零**（scores/reviews/word_reviews/pair_drills/practice_log 均为 0，clips 保留 3 条收藏） |
+| 练习数据 | **已全部清零**（v0.4 自测留下的假练习已用 `tools/reset_practice_data.py --yes` 清掉；clips 保留 3 条收藏） |
 | 大模型 key | DeepSeek 已写入 `.env`（`VN_LLM_API_KEY`）并**实测可用** |
+| v0.4 新增 | ① **统一复习队列**：单词卡进 SM-2（`word_reviews` 表），复习页是句子卡 + 单词卡的混排队列 ② **按说话人拆句**：新任务 `split_speakers`，按词级时间戳切开「多人被合成一句」的情况，含 seg_idx 数据迁移 + 事务 + 数据库自动备份 |
 
 现有项目：
 
