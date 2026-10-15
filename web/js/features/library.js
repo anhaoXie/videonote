@@ -16,8 +16,11 @@ ui.registerTab({
   render(panel) {
     if (!store.project) {
       panel.innerHTML = `<div class="card"><h3>还没有项目</h3>
-        <div class="hint">点左上角「＋ 导入视频」，支持：本地上传 / 本机路径 / 视频链接（B站、YouTube 等）。<br>
-        导入后会自动跑「完整分析」：语音识别 → 画面关键帧 → 摘要笔记 → 字幕。</div></div>`;
+        <div class="hint">支持：本地上传 / 本机路径 / 视频链接（B站、YouTube 等）。<br>
+        导入后会自动跑「完整分析」：语音识别 → 画面关键帧 → 摘要笔记 → 字幕。</div>
+        <div class="row" style="margin-top:12px">
+          <button class="btn primary" data-open-import>＋ 导入视频</button>
+        </div></div>`;
       return;
     }
     const p = store.project;

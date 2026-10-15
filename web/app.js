@@ -137,7 +137,14 @@ function wireFileBrowser() {
 }
 
 async function boot() {
-  wireChrome();
+  // 接线失败绝不能中断后面的事。真实事故：空状态里的 #btn-new2 会被 renderTabs()
+  // 重写 #content 时删掉 → wireChrome() 抛异常 → 能力清单从未加载
+  // → 两个下拉框永远是空的、项目列表也不出来。
+  try {
+    wireChrome();
+  } catch (err) {
+    console.error('[boot] 界面接线失败（其余功能继续）：', err);
+  }
   connectSSE();
   startWatchdog();
   await loadCapabilities();
@@ -202,6 +209,23 @@ function renderCapabilities() {
     hint.innerHTML = `<span style="color:var(--warn)">有插件加载失败：</span><br>` +
       Object.entries(cap.plugins.import_errors).map(([k, v]) => `<code>${esc(k)}</code>: ${esc(v)}`).join('<br>');
   }
+  syncImportJob();
+}
+
+// 「导入后跑什么」：折叠条上显示当前选中的是什么，展开后显示这条流水线是干什么的。
+// 选项本身由 renderCapabilities() 从 /api/capabilities 填好。
+function syncImportJob() {
+  const sel = document.getElementById('import-job');
+  if (!sel) return;
+  const opt = sel.options[sel.selectedIndex];
+  const cur = document.getElementById('adv-current');
+  const hint = document.getElementById('adv-hint');
+  const kinds = (store.capabilities?.job_kinds?.length) ? store.capabilities.job_kinds : FALLBACK_KINDS;
+  const meta = kinds.find((k) => k.name === sel.value);
+  if (cur) cur.textContent = opt ? opt.textContent : '完整分析（推荐）';
+  if (hint) hint.textContent = (meta && meta.description)
+    ? meta.description
+    : '决定导入后自动跑哪条流水线；不确定就用默认的「完整分析」。';
 }
 
 async function refreshProjects() {
@@ -306,49 +330,104 @@ export async function selectProject(pid) {
 }
 
 // ---------------------------------------------------------------------------
+// 接线助手：某个元素缺失时只跳过它自己，绝不让后面所有接线一起中断。
+// 真实事故：空状态里的 #btn-new2 会被 renderTabs() 重写 #content 时删掉，
+// 于是「开始」按钮 / 渠道按钮 / 关闭按钮全都没接上，能力清单也不再加载。
+function wire(id, handler, event = 'onclick') {
+  const el = document.getElementById(id);
+  if (!el) { console.warn(`[wire] 找不到 #${id}，已跳过`); return null; }
+  el[event] = handler;
+  return el;
+}
+
 function wireChrome() {
   wireFileBrowser();
-  document.getElementById('btn-refresh').onclick = async () => {
+  wire('btn-refresh', async () => {
     await refreshProjects();
     if (store.project) await selectProject(store.project.id);
     ui.toast('已刷新', 'ok', 1500);
-  };
-  document.getElementById('btn-run').onclick = async () => {
+  });
+  wire('btn-run', async () => {
     if (!store.project) return ui.toast('先选择一个项目', 'err');
-    const kind = document.getElementById('job-kind').value;
+    // 能力清单还没加载上时下拉框是空的，兜底走完整分析，别发空任务类型
+    const kind = document.getElementById('job-kind').value || 'analyze';
     const job = await api.runJob(store.project.id, kind);
     ui.toast(`已排队：${kind}`, 'ok');
     setTimeout(() => selectProject(store.project.id), 800);
     void job;
-  };
+  });
   const modal = document.getElementById('modal');
   let uploadAbort = null;
-  const openModal = () => { modal.hidden = false; };
+  const openModal = () => { if (modal) modal.hidden = false; };
   // 关弹窗时顺手取消还在进行的上传，避免"弹窗关不掉的假死"感觉
   const closeModal = () => {
-    modal.hidden = true;
+    if (modal) modal.hidden = true;
     if (uploadAbort) { try { uploadAbort.abort(); } catch (e) { /* ignore */ } uploadAbort = null; }
   };
-  document.getElementById('btn-new').onclick = openModal;
-  document.getElementById('btn-new2').onclick = openModal;
-  document.getElementById('modal-close').onclick = closeModal;
-  document.getElementById('modal-cancel').onclick = closeModal;
+  // 「导入视频」用事件委托而不是直接绑元素：空状态那个按钮会被 renderTabs() 重写掉，
+  // 而重写之后重新绑是没人负责的 —— 委托就永远有效。
+  document.addEventListener('click', (e) => {
+    const t = e.target.closest && e.target.closest('[data-open-import]');
+    if (t) { e.preventDefault(); openModal(); }
+  });
+  wire('btn-new', openModal);
+  wire('btn-new2', openModal);
+  wire('modal-close', closeModal);
+  wire('modal-cancel', closeModal);
+  if (!modal) console.warn('[wire] 找不到导入弹窗 #modal');
   // 点遮罩空白处 / 按 ESC 也能关 —— 弹窗挡住整页时用户必须能脱身
-  modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+  if (modal) modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && !modal.hidden) closeModal();
+    if (e.key === 'Escape' && modal && !modal.hidden) closeModal();
   });
 
+  // ---- 第 1 步：渠道选择，一次只让一个渠道的输入面板出现 ----
   let mode = 'upload';
+  const setMode = (m) => {
+    mode = m;
+    document.querySelectorAll('#import-mode .seg-btn').forEach((x) =>
+      x.classList.toggle('active', x.dataset.mode === m));
+    document.querySelectorAll('[data-pane]').forEach((p) => { p.hidden = p.dataset.pane !== m; });
+    if (m !== 'path') {
+      const box = document.getElementById('fs-browser');
+      if (box) box.hidden = true;      // 换渠道时把文件浏览器收起来
+    }
+  };
   document.querySelectorAll('#import-mode .seg-btn').forEach((b) => {
-    b.onclick = () => {
-      mode = b.dataset.mode;
-      document.querySelectorAll('#import-mode .seg-btn').forEach((x) => x.classList.toggle('active', x === b));
-      document.querySelectorAll('[data-pane]').forEach((p) => { p.hidden = p.dataset.pane !== mode; });
-    };
+    b.onclick = () => setMode(b.dataset.mode);
+  });
+  setMode('upload');
+
+  // ---- 第 2 步：选完文件必须看得见。原生 file input 的反馈太弱，
+  // 只显示个文件名，很容易让人以为"没选上"，然后觉得「开始」点不动。----
+  const fileInput = document.getElementById('file-input');
+  const picked = document.getElementById('file-picked');
+  if (fileInput && picked) fileInput.addEventListener('change', () => {
+    const f = fileInput.files[0];
+    if (!f) { picked.hidden = true; return; }
+    const mb = f.size / 1048576;
+    const big = mb > 300;
+    picked.hidden = false;
+    picked.className = `picked${big ? ' warn' : ''}`;
+    picked.innerHTML =
+      `<b>${esc(f.name)}</b><span class="sz">${mb >= 1024
+        ? `${(mb / 1024).toFixed(2)} GB`
+        : `${mb.toFixed(mb < 10 ? 1 : 0)} MB`}</span>` +
+      (big ? `<span style="color:var(--warn)">文件较大：浏览器上传会慢，而且会复制一份进项目目录。</span>
+        <button class="btn small" id="to-path" type="button">改用「本机路径」（不复制）</button>` : '');
+    const toPath = document.getElementById('to-path');
+    if (toPath) toPath.onclick = () => setMode('path');
   });
 
-  document.getElementById('modal-ok').onclick = async () => {
+  // ---- 第 3 步：流水线类型默认收起（第一次用不需要在导入时做这个选择）----
+  const advBox = document.getElementById('adv-box');
+  wire('adv-toggle', () => { if (advBox) advBox.hidden = !advBox.hidden; });
+  const jobSel = document.getElementById('import-job');
+  if (jobSel) jobSel.addEventListener('change', syncImportJob);
+  syncImportJob();
+
+  const okBtn = document.getElementById('modal-ok');
+  if (okBtn) okBtn.onclick = async () => {
     const title = document.getElementById('title-input').value.trim();
     // 兜底：下拉框万一没选项（能力清单没加载上），也默认走「完整分析」，绝不发空任务类型
     const kind = document.getElementById('import-job').value || 'analyze';
@@ -359,12 +438,6 @@ function wireChrome() {
       if (mode === 'upload') {
         const f = document.getElementById('file-input').files[0];
         if (!f) throw new Error('请先点「选择文件」挑一个视频');
-        const mb = f.size / 1048576;
-        if (mb > 300 && !confirm(
-          `这个文件 ${mb.toFixed(0)} MB，走浏览器上传会比较慢，而且会复制一份到项目目录。\n\n` +
-          `建议改用「本机路径」方式（不复制、立刻开始）。\n\n还是要现在上传吗？`)) {
-          throw new Error('已取消（建议改用「本机路径」）');
-        }
         btn.textContent = '上传中…';
         const fd = new FormData();
         fd.append('file', f);
@@ -387,7 +460,7 @@ function wireChrome() {
         bar.hidden = true;
       } else if (mode === 'path') {
         const path = document.getElementById('path-input').value.trim();
-        if (!path) throw new Error('请输入本机文件路径');
+        if (!path) throw new Error('请输入本机文件路径，或点「📁 浏览」选一个');
         res = await api.createProject({ title, source_type: 'file', path, auto_start: true, job_kind: kind });
       } else {
         const url = document.getElementById('url-input').value.trim();
@@ -395,6 +468,8 @@ function wireChrome() {
         res = await api.createProject({ title, source_type: 'url', url, auto_start: true, job_kind: kind });
       }
       closeModal();
+      fileInput.value = '';        // 下次打开是干净的
+      picked.hidden = true;
       ui.toast('已创建，任务开始跑', 'ok');
       await refreshProjects();
       if (res?.project?.id) await selectProject(res.project.id);

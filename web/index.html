@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>VideoNote · 视频学习工作台</title>
-<link rel="stylesheet" href="./style.css?v=0.3.0" />
+<link rel="stylesheet" href="./style.css?v=0.4.2" />
 </head>
 <body>
 <div id="boot-error" class="conn-banner" hidden></div>
@@ -87,7 +87,7 @@
       <h2>把视频丢进来，剩下的交给它</h2>
       <p class="muted">语音识别 · 画面分析 · 摘要笔记 · 自动字幕 · 逐句跟读</p>
       <div class="empty-actions">
-        <button class="btn primary" id="btn-new2">导入本地视频</button>
+        <button class="btn primary" id="btn-new2" data-open-import>导入本地视频</button>
       </div>
       <div class="hint" id="startup-hint"></div>
     </div>
@@ -102,40 +102,52 @@
     </div>
     <div class="modal-body">
       <div class="field">
-        <label>方式</label>
-        <div class="seg" id="import-mode">
-          <button class="seg-btn active" data-mode="upload">本地上传</button>
-          <button class="seg-btn" data-mode="path">本机路径</button>
-          <button class="seg-btn" data-mode="url">视频链接</button>
+        <label>第 1 步 · 从哪里导入</label>
+        <div class="seg-tabs" id="import-mode">
+          <button class="seg-btn active" data-mode="upload">
+            <b>上传文件</b><span>浏览器上传，会复制一份进项目目录</span>
+          </button>
+          <button class="seg-btn" data-mode="path">
+            <b>本机路径</b><span>不复制、立刻开始 · 大视频推荐</span>
+          </button>
+          <button class="seg-btn" data-mode="url">
+            <b>视频链接</b><span>B站 / YouTube 等</span>
+          </button>
         </div>
       </div>
+
       <div class="field" data-pane="upload">
-        <label>选择视频文件</label>
+        <label>第 2 步 · 选择视频文件</label>
         <input type="file" id="file-input" accept="video/*,audio/*" />
+        <div class="picked" id="file-picked" hidden></div>
         <div class="upload-bar" id="upload-bar" hidden><div id="upload-fill"></div></div>
-        <div class="hint">大文件建议直接选，浏览器会显示上传进度。</div>
       </div>
       <div class="field" data-pane="path" hidden>
-        <label>本机文件绝对路径</label>
+        <label>第 2 步 · 本机文件绝对路径</label>
         <div class="row" style="gap:8px;flex-wrap:nowrap">
           <input type="text" id="path-input" placeholder="点右边「浏览」选文件，或直接粘贴路径" />
           <button class="btn" id="fs-open" style="white-space:nowrap">📁 浏览</button>
         </div>
-        <div class="hint">不复制文件、立刻开始 —— 大视频推荐用这种方式。</div>
         <div id="fs-browser" class="fs-browser" hidden></div>
       </div>
       <div class="field" data-pane="url" hidden>
-        <label>视频链接</label>
+        <label>第 2 步 · 视频链接</label>
         <input type="text" id="url-input" placeholder="https://www.bilibili.com/video/BV..." />
         <div class="hint">用 yt-dlp 下载，支持 B站 / YouTube 等上千个站点。</div>
       </div>
+
       <div class="field">
-        <label>标题（可留空自动取）</label>
+        <label>第 3 步 · 标题（可留空自动取）</label>
         <input type="text" id="title-input" placeholder="例如：老友记 S01E01" />
       </div>
       <div class="field">
-        <label>导入后立即执行</label>
-        <select id="import-job" class="select block"></select>
+        <button class="btn adv-toggle" id="adv-toggle" type="button">
+          <span>⚙ 导入后跑什么</span><span class="cur" id="adv-current">完整分析（推荐）</span>
+        </button>
+        <div id="adv-box" hidden>
+          <select id="import-job" class="select block"></select>
+          <div class="hint" id="adv-hint"></div>
+        </div>
       </div>
     </div>
     <div class="modal-foot">
@@ -147,6 +159,7 @@
 
 <div class="toasts" id="toasts"></div>
 
-<script type="module" src="./app.js?v=0.3.0"></script>
+<!-- ?v= 是缓存破除参数：改了 web/ 下的任何文件都要把它 +1，否则老用户会继续吃浏览器缓存里的旧脚本 -->
+<script type="module" src="./app.js?v=0.4.2"></script>
 </body>
 </html>

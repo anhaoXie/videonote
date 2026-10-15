@@ -5,6 +5,10 @@
   font-family: "Segoe UI", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
 }
 *{box-sizing:border-box}
+/* [hidden] 必须真的隐藏。作者样式里任何 display:*（例如 .field{display:flex}）都会盖掉
+   浏览器对 [hidden] 的 display:none —— 来源优先于优先级，跟选择器权重无关。
+   这个坑真实发生过：导入弹窗的三个"渠道"面板因为 .field 是 flex，从来没被藏起来过。 */
+[hidden]{display:none !important}
 html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-size:14px}
 button,input,select,textarea{font-family:inherit;font-size:inherit;color:inherit}
 ::-webkit-scrollbar{width:9px;height:9px}
@@ -161,16 +165,43 @@ a{color:var(--accent)}
 
 /* ---------- modal / toast ---------- */
 .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:50;backdrop-filter:blur(2px)}
-.modal{background:var(--bg2);border:1px solid var(--line);border-radius:14px;width:min(560px,92vw);max-height:88vh;overflow:auto;box-shadow:0 24px 60px rgba(0,0,0,.55)}
-.modal-head{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid var(--line)}
+.modal{background:var(--bg2);border:1px solid var(--line);border-radius:14px;width:min(560px,92vw);max-height:88vh;display:flex;flex-direction:column;box-shadow:0 24px 60px rgba(0,0,0,.55)}
+.modal-head{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid var(--line);flex:none}
 .modal-head h3{margin:0;font-size:15px}
-.modal-body{padding:16px;display:flex;flex-direction:column;gap:14px}
-.modal-foot{display:flex;justify-content:flex-end;gap:8px;padding:12px 16px;border-top:1px solid var(--line)}
+/* 只有中间滚动，「取消 / 开始」永远在视野里 —— 之前整个弹窗一起滚，
+   面板一多「开始」就被推到屏幕外，看起来像"点不动"。 */
+.modal-body{padding:16px;display:flex;flex-direction:column;gap:14px;flex:1;overflow:auto;min-height:0}
+.modal-foot{display:flex;justify-content:flex-end;gap:8px;padding:12px 16px;border-top:1px solid var(--line);flex:none}
 .field{display:flex;flex-direction:column;gap:6px}
 .field>label{font-size:12px;color:var(--muted)}
-.seg{display:inline-flex;background:var(--bg3);border-radius:9px;padding:3px;gap:3px}
-.seg-btn{background:transparent;border:none;padding:6px 12px;border-radius:7px;cursor:pointer;color:var(--muted)}
-.seg-btn.active{background:var(--accent);color:#fff}
+/* 导入弹窗的"渠道"选择：三张卡片，一次只让一个渠道的输入面板出现。
+   注意类名**不能**叫 .seg —— 那是内容行（转写/笔记/任务历史）的类名，撞过一次了。 */
+.seg-tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}
+.seg-btn{display:flex;flex-direction:column;gap:3px;align-items:flex-start;text-align:left;
+  background:var(--bg3);border:1px solid var(--line);padding:9px 11px;border-radius:10px;cursor:pointer}
+.seg-btn b{font-size:13px;font-weight:600}
+.seg-btn span{font-size:11px;color:var(--muted);line-height:1.35}
+.seg-btn:hover{border-color:#394152}
+.seg-btn.active{border-color:var(--accent);background:#16203a}
+.seg-btn.active b{color:#fff}
+.seg-btn.active span{color:#9fd0ff}
+@media (max-width:520px){.seg-tabs{grid-template-columns:1fr}}
+
+/* 选好的文件要看得见（原生 file input 只显示文件名，很容易以为"没选上"） */
+.picked{margin-top:7px;padding:8px 10px;border:1px solid var(--line);border-radius:9px;
+  background:var(--bg3);font-size:12.5px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.picked .sz{color:var(--muted)}
+.picked.warn{border-color:var(--warn)}
+input[type=file]{background:var(--bg3);border:1px dashed var(--line);border-radius:10px;
+  padding:12px;width:100%;cursor:pointer;font-size:12.5px}
+input[type=file]:hover{border-color:var(--accent)}
+input[type=file]::file-selector-button{background:var(--accent);color:#fff;border:none;border-radius:7px;
+  padding:7px 12px;margin-right:10px;cursor:pointer;font-family:inherit;font-size:12.5px}
+
+/* 「导入后跑什么」默认收起：第一次用的人不需要在导入时做流水线选择 */
+.adv-toggle{display:flex;justify-content:space-between;align-items:center;width:100%;gap:10px}
+.adv-toggle .cur{color:var(--muted);font-weight:400;font-size:12px}
+#adv-box{margin-top:8px;display:flex;flex-direction:column;gap:7px}
 .upload-bar{height:5px;background:var(--bg3);border-radius:5px;overflow:hidden}
 .upload-bar>div{height:100%;width:0;background:var(--accent2);transition:width .2s}
 .toasts{position:fixed;right:18px;bottom:18px;display:flex;flex-direction:column;gap:8px;z-index:99}
