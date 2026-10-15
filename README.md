@@ -10,6 +10,7 @@
 ![platform](https://img.shields.io/badge/platform-Windows-0078d4)
 ![python](https://img.shields.io/badge/python-3.12-3776ab)
 ![offline](https://img.shields.io/badge/100%25-本地离线可跑-22c55e)
+![license](https://img.shields.io/badge/license-MIT-green)
 
 ![概览](docs/screenshots/01-overview.png)
 
