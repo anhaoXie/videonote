@@ -3,7 +3,7 @@
 > 初版生成时间：2026-10-15 17:30（Asia/Shanghai）
 > **v0.4 更新：2026-10-15 17:55** —— 第 1 节的快照已按 v0.4 修正；正文其余部分（架构、命令、
 > 限制清单）基本仍然有效，但「已完成到什么程度」请以 `ROADMAP.md` 为准。
-> 项目根目录：`C:\Users\谢安豪\Documents\deepseek-harness\default-workspace\videonote`
+> 项目根目录：`<你 clone 下来的 videonote 目录>`
 > **已经是 git 仓库了**：v0.4 开工时 `git init` 并提交了基线（`c10ed3d` → `5fdd24d`）。
 > 改动前先看 `git status` —— 它能暴露「另一个会话同时也在改这个项目」这类**静默覆盖**，
 > 而这在 v0.4 期间真实发生过（另一个会话写入了 `HANDOFF.md` 与 `reset_practice_data.py`）。
@@ -62,7 +62,7 @@ FastAPI + SQLite、原生 ES Module 前端（**无构建步骤**）、插件化�
 ## 2. 立刻能跑的命令
 
 ```powershell
-cd C:\Users\谢安豪\Documents\deepseek-harness\default-workspace\videonote
+cd <项目目录>
 
 # 起服务（开发用；用户桌面是双击 VideoNote 图标 → launcher.py）
 .\.venv\Scripts\python.exe run.py --no-browser

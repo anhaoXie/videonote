@@ -6,6 +6,13 @@
 > 特点：**完全本地可跑**（不配任何 API key 也能用）、**插件化架构**（加功能不用改既有代码）、
 > **像 App 一样用**（桌面图标双击即开，独立窗口，没有浏览器地址栏）。
 
+![version](https://img.shields.io/badge/version-0.4.0-blue)
+![platform](https://img.shields.io/badge/platform-Windows-0078d4)
+![python](https://img.shields.io/badge/python-3.12-3776ab)
+![offline](https://img.shields.io/badge/100%25-本地离线可跑-22c55e)
+
+![概览](docs/screenshots/01-overview.png)
+
 ---
 
 ## 1. 快速开始（推荐：桌面图标）
@@ -34,6 +41,12 @@
 1. **本地上传** —— 选文件上传（会复制一份到项目目录，大文件慢）
 2. **本机路径** —— 点「📁 浏览」在网页里直接点着选，**不复制文件、立刻开始**（大视频首选）
 3. **视频链接** —— B站 / YouTube 等 yt-dlp 支持的站点
+
+导入弹窗是**三步**：先选渠道（**一次只出现当前渠道的输入，不会三个叠在一起**）→ 再选文件 → 选项。
+
+| 第 1 步：选渠道 | 第 2 步：只出现该渠道 | 选项：导入后跑什么 |
+| --- | --- | --- |
+| ![渠道选择](docs/screenshots/07-import-upload.png) | ![本机路径](docs/screenshots/08-import-path.png) | ![高级选项](docs/screenshots/09-import-advanced.png) |
 
 ---
 
@@ -84,6 +97,19 @@
 
 快捷键：`空格` 播放/暂停、`R` 重听本句、`N/→` 下一句、`P/←` 上一句、`M` 录音、`L` 单句循环。
 「复习」页另有：`空格` 听原声、`R` 开始/停止录音（停止后自动评分）、`Enter` 下一句。
+
+### 界面
+
+| 播放 / 跟读（双语字幕 + 逐句跟读） | 逐句转写（说话人分离 + 逐句译文） |
+| --- | --- |
+| ![播放跟读](docs/screenshots/03-player.png) | ![逐句转写](docs/screenshots/02-transcript.png) |
+
+| 摘要笔记 | 单词最小对立对 |
+| --- | --- |
+| ![摘要笔记](docs/screenshots/04-notes.png) | ![单词训练](docs/screenshots/05-words.png) |
+
+> 截图只用仓库自带的 `samples/`（`test_video.mp4` 的 JFK 片段 + `two_speakers.wav` 合成双人对话），
+> 所以里面没有任何个人信息，你 clone 下来跑一遍就能得到同样的界面。
 
 ### 一条完整的口语训练链路
 
