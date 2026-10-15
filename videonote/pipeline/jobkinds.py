@@ -79,6 +79,15 @@ register_job_kind(
     label="说话人分离",
 )
 
+# 按说话人拆句（v0.4）：把被 ASR 合成一句的多人对话切开
+# 注意：会重排句号，所以句库/评分/复习队列会跟着迁移（数据库先自动备份）
+register_job_kind(
+    "split_speakers",
+    ["split_speakers"],
+    description="把「A 说一句 + B 回一句」被合成一句的情况按说话人切开（句库/评分/复习自动改号迁移）",
+    label="按说话人拆句（需先做说话人分离）",
+)
+
 # 画面描述（需要视觉大模型 key）
 register_job_kind(
     "captions",

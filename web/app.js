@@ -26,6 +26,7 @@ const FALLBACK_KINDS = [
   { name: 'summarize', label: '重做摘要笔记' },
   { name: 'frames', label: '画面关键帧' },
   { name: 'diarize', label: '说话人分离' },
+  { name: 'split_speakers', label: '按说话人拆句' },
   { name: 'captions', label: '画面描述（视觉大模型）' },
   { name: 'ingest', label: '仅导入媒体' },
 ];

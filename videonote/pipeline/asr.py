@@ -38,6 +38,9 @@ class ASRStage(Stage):
                       meta={"language": tr.language, "segments": len(tr.segments),
                             "provider": tr.provider, "model": tr.model})
         db.replace_segments(ctx.project_id, [s.to_dict() for s in tr.segments])
+        # 重新识别会重新编号句子，之前的拆句结果随之作废。
+        # 不删的话 split_speakers 会因为「已有产出」被静默跳过，留下没拆的句子。
+        db.delete_artifact(ctx.project_id, "split_report")
         db.update_project(ctx.project_id, duration=tr.duration or ctx.project.get("duration") or 0)
 
         srt = _fmt_srt(tr)

@@ -97,13 +97,7 @@ def wait_job(c: httpx.Client, jid: str, timeout: float = 1800) -> dict:
         time.sleep(2)
 
 
-def main() -> int:
-    audio = build_audio()
-    c = httpx.Client(base_url=BASE, timeout=600)
-
-    res = c.post("/api/projects", json={"title": "自检 - 两说话人", "source_type": "file",
-                                        "path": str(audio), "auto_start": True, "job_kind": "transcribe"}).json()
-    pid, job = res["project"]["id"], res["job"]["id"]
+def _run(c: httpx.Client, pid: str, job: str) -> int:
     print(f"\n项目 {pid}：先转写…")
     j = wait_job(c, job)
     if j["status"] != "done":
@@ -148,6 +142,29 @@ def main() -> int:
     print("\n⚠️ 整条管线只识别出 1 位说话人（多半是 ASR 把几段合并成一句了）")
     print("→ 单独验证声纹聚类本身：")
     return 0 if unit_check_diarizer() else 2
+
+
+def main() -> int:
+    keep = "--keep" in sys.argv
+    audio = build_audio()
+    c = httpx.Client(base_url=BASE, timeout=600)
+
+    res = c.post("/api/projects", json={"title": "自检 - 两说话人", "source_type": "file",
+                                        "path": str(audio), "auto_start": True, "job_kind": "transcribe"}).json()
+    pid, job = res["project"]["id"], res["job"]["id"]
+    try:
+        return _run(c, pid, job)
+    finally:
+        # 自检不该在用户的项目列表里一次堆一个：跑完就删掉**这次**建的项目。
+        # （想留着看结果：加 --keep）
+        if keep:
+            print(f"\n保留自检项目 {pid}（--keep）")
+        else:
+            try:
+                c.delete(f"/api/projects/{pid}")
+                print(f"\n已清理自检项目 {pid}（想留着看结果就加 --keep）")
+            except Exception as exc:  # noqa: BLE001
+                print(f"\n清理自检项目失败（可手动删 {pid}）：{exc}")
 
 
 if __name__ == "__main__":

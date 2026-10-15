@@ -294,7 +294,6 @@ class PyannoteDiarizer(Diarizer):
         assignments: Dict[int, str] = {}
         order: Dict[str, str] = {}
         for seg in segments:
-            s_mid = (float(seg["start"]) + float(seg["end"])) / 2
             best, best_overlap = None, 0.0
             for a, b, spk in turns:
                 overlap = max(0.0, min(float(seg["end"]), b) - max(float(seg["start"]), a))
@@ -304,6 +303,22 @@ class PyannoteDiarizer(Diarizer):
                 if best not in order:
                     order[best] = f"说话人{len(order) + 1}"
                 assignments[int(seg["idx"])] = order[best]
+
+        # 窗口级时间线：`pipeline/split_speakers.py`（按说话人拆句）靠它把
+        # 「A 一句 + B 一句被合成一句」的情况切开。缺了这一段，
+        # 换成 pyannote 之后拆句会**静默失效**（只有 local_ecapa 能用）。
+        windows: List[Dict[str, Any]] = []
+        for a, b, spk in turns:
+            label = order.get(spk)
+            if label is None:
+                label = f"说话人{len(order) + 1}"
+                order[spk] = label
+            mid = (float(a) + float(b)) / 2
+            seg_idx = next((int(s["idx"]) for s in segments
+                            if float(s["start"]) <= mid < float(s["end"])), -1)
+            windows.append({"seg": seg_idx, "start": round(float(a), 2),
+                            "end": round(float(b), 2), "dur": round(float(b) - float(a), 2),
+                            "label": label})
         speakers = {}
         for seg in segments:
             name = assignments.get(int(seg["idx"]))
@@ -314,7 +329,7 @@ class PyannoteDiarizer(Diarizer):
             e["talk_time"] = round(e["talk_time"] + float(seg["end"]) - float(seg["start"]), 2)
             e["segments"].append(int(seg["idx"]))
         return {"assignments": assignments, "speakers": list(speakers.values()),
-                "engine": "pyannote", "clusters": len(speakers)}
+                "windows": windows, "engine": "pyannote", "clusters": len(speakers)}
 
 
 @register_provider("diarize", "local_ecapa")

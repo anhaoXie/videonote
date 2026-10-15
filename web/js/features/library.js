@@ -8,6 +8,7 @@ const ART_LABEL = {
   transcript_text: '转写文本', frames: '关键帧索引', frames_sheet: '缩略图墙', notes: '笔记 Markdown',
   summary: '结构化摘要', subtitles_srt: '字幕 SRT', subtitles_vtt: '字幕 VTT',
   translation: '逐句译文', video_hardsub: '硬字幕视频', upload_tmp: '上传文件',
+  diarization: '说话人分离 JSON', split_report: '拆句报告',
 };
 
 ui.registerTab({
@@ -54,11 +55,16 @@ ui.registerTab({
           <button class="btn" data-run="summarize">重做摘要</button>
           <button class="btn" data-run="frames">画面关键帧</button>
           <button class="btn" data-run="diarize">说话人分离</button>
+          <button class="btn" data-run="split_speakers">按说话人拆句</button>
           <button class="btn" data-run="captions">画面描述（VLM）</button>
           <button class="btn" data-run="burn">压制硬字幕视频</button>
         </div>
         <div class="hint">「压制硬字幕」很慢（要重新编码整部视频）；「双语字幕」「画面描述」需要大模型 key；
-        「说话人分离」用本地声纹模型，CPU 也能跑（第一次会下载约 80MB 模型）。</div>
+        「说话人分离」用本地声纹模型，CPU 也能跑（第一次会下载约 80MB 模型）。<br>
+        「按说话人拆句」要在说话人分离<b>之后</b>用：ASR 常把「A 说一句 + B 回一句」并成一句，
+        这一步按词级时间戳把它切开、各归各的说话人。它会<b>重排句子编号</b>，
+        句库 / 评分 / 复习队列会自动迁移，数据库先备份到 <code>data/backups/</code>；
+        译文只会留在最长的那一段（想让每段都有自己的译文就重跑「翻译」）。</div>
       </div>
 
       <div class="card">
@@ -78,6 +84,10 @@ ui.registerTab({
     });
     panel.querySelectorAll('[data-run]').forEach((el) => {
       el.onclick = async () => {
+        // 拆句会重排句子编号，是不可逆的操作（虽然会自动备份 + 迁移），所以单独确认一次
+        if (el.dataset.run === 'split_speakers' &&
+          !window.confirm('拆句会重排句子编号：句库 / 评分 / 复习队列会自动迁移，'
+            + '数据库先备份到 data/backups/。\n\n继续？')) return;
         await api.runJob(p.id, el.dataset.run);
         ui.toast(`已排队：${el.dataset.run}`, 'ok');
         emit('projectChanged', {});

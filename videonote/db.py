@@ -10,8 +10,9 @@ from __future__ import annotations
 
 import sqlite3
 import threading
+from contextlib import contextmanager
 from datetime import date, timedelta
-from typing import Any, Iterable, Optional
+from typing import Any, Iterable, Iterator, Optional
 
 from .config import settings
 from .models import JobStatus, dumps, loads, new_id, now_iso
@@ -233,6 +234,27 @@ def query(sql: str, params: Iterable[Any] = ()) -> list[dict]:
 def query_one(sql: str, params: Iterable[Any] = ()) -> Optional[dict]:
     rows = query(sql, params)
     return rows[0] if rows else None
+
+
+@contextmanager
+def transaction() -> Iterator[sqlite3.Connection]:
+    """把多条写操作合成一个**原子**事务。
+
+    只有一个场景非它不可：**段落改号**（拆句会重排 seg_idx）。那种操作要同时重写
+    segments 并重映射 clips / scores / reviews / practice_log，中途失败会留下
+    「句子已经换了号、句库还指着旧号」的错位状态——比干脆不做更糟，因为它是静默的。
+
+    注意：在 with 块里**不要**调用本模块的 execute()/upsert_* 等写函数，
+    它们每次都会 commit，会把事务提前截断。要用 yield 出来的 conn 自己执行。
+    """
+    with _lock:
+        conn = connect()
+        try:
+            yield conn
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
 
 
 # --------------------------------------------------------------------------

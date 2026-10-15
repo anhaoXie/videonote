@@ -48,6 +48,9 @@ class DiarizeStage(Stage):
         speakers = result.get("speakers") or []
         ctx.save_json("diarization", result, "diarization.json",
                       meta={"speakers": len(speakers), "engine": result.get("engine", "")})
+        # 说话人结果变了，之前的拆句结论要重算：
+        # 删掉产出，让 split_speakers 可以再跑一次（它对已拆过的句子是幂等的）。
+        db.delete_artifact(ctx.project_id, "split_report")
         from ..core import events
 
         events.publish({"type": "diarized", "project_id": ctx.project_id, "speakers": len(speakers)})
