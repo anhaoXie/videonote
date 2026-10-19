@@ -11,6 +11,7 @@ from typing import Any, Dict, List
 
 from ..core.registry import register_stage
 from ..core.stages import Stage, StageContext
+from ..core.zh import to_simplified
 
 
 @register_stage
@@ -31,7 +32,9 @@ class SubtitlesStage(Stage):
         cues: List[Dict[str, Any]] = []
         for s in segs:
             text = (s.get("text") or "").strip()
-            zh = (translation.get(str(s.get("idx"))) or "").strip()
+            # 最后一道保险：译文落地成字幕前再转一次简体。
+            # 老项目里已经存着繁体 translation.json，重跑字幕也会被这里纠正。
+            zh = to_simplified((translation.get(str(s.get("idx"))) or "").strip())
             if bilingual and zh:
                 text = f"{text}\n{zh}"
             cues.append({"start": float(s["start"]), "end": float(s["end"]), "text": text})

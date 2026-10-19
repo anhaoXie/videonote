@@ -55,6 +55,10 @@ class StageContext:
     def begin_stage(self, stage: str, index: int, total: int) -> None:
         self._stage, self._stage_index, self._stage_total = stage, index, total
         self._stage_pct = 0.0
+        # _last_pct 必须一起重置：节流判据是 (pct - _last_pct < 0.5)，
+        # 上一阶段停在 100、这一阶段从 0 起步时会算出 -100，新阶段的起步进度全被吞掉，
+        # 看起来就是「进度不动 → 突然跳一大截」。
+        self._last_pct = -1.0
 
     @property
     def overall_pct(self) -> float:

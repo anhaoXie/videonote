@@ -499,7 +499,7 @@ function connectSSE() {
     let d;
     try { d = JSON.parse(ev.data); } catch (e) { return; }
     if (d.type === 'progress') {
-      ui.setProgress(d.pct, d.stage, d.message);
+      ui.setProgress(d.pct, d.stage, d.message, d.job_id);
       if (!pending) {
         pending = true;
         setTimeout(async () => {
@@ -513,8 +513,13 @@ function connectSSE() {
       }
     } else if (d.type === 'job') {
       const done = ['done', 'failed', 'canceled'].includes(d.status);
+      if (!done) {
+        // 任务刚排队/开始就先把进度条亮出来：上传完到第一个阶段真正干活之间
+        // 有一段空窗（模型加载、worker 轮询），不给反馈就会觉得"卡住了"。
+        ui.setProgress(0, d.stage || '准备中', d.message || '任务已开始', d.job_id);
+      }
       if (done) {
-        ui.setProgress(d.status === 'done' ? 100 : null, d.stage || '', d.message);
+        ui.setProgress(d.status === 'done' ? 100 : null, d.stage || '', d.message, d.job_id);
         if (d.status === 'done') ui.toast('任务完成', 'ok');
         if (d.status === 'failed') ui.toast(`任务失败：${esc(d.message)}`, 'err', 9000);
         setTimeout(() => { ui.setProgress(null); }, 2500);

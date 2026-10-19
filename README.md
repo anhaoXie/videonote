@@ -6,7 +6,7 @@
 > 特点：**完全本地可跑**（不配任何 API key 也能用）、**插件化架构**（加功能不用改既有代码）、
 > **像 App 一样用**（桌面图标双击即开，独立窗口，没有浏览器地址栏）。
 
-![version](https://img.shields.io/badge/version-0.4.0-blue)
+![version](https://img.shields.io/badge/version-0.4.1-blue)
 ![platform](https://img.shields.io/badge/platform-Windows-0078d4)
 ![python](https://img.shields.io/badge/python-3.12-3776ab)
 ![offline](https://img.shields.io/badge/100%25-本地离线可跑-22c55e)

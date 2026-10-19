@@ -207,11 +207,21 @@ export const ui = {
     box.appendChild(el);
     setTimeout(() => { el.style.opacity = '0'; setTimeout(() => el.remove(), 300); }, ms);
   },
-  setProgress(pct, stage, msg) {
+  // 进度条「只增不减」：真实事故是多个任务/多个阶段的事件交错时数值来回横跳。
+  // jobId 变化 = 换了个任务，允许归零；同一个任务内只接受更大的百分比。
+  setProgress(pct, stage, msg, jobId) {
     const wrap = document.getElementById('progress-wrap');
-    if (pct === null) { wrap.hidden = true; return; }
+    if (pct === null) {
+      wrap.hidden = true;
+      this._progJob = null;
+      this._progPct = 0;
+      return;
+    }
     wrap.hidden = false;
-    document.getElementById('progress-bar').style.width = `${Math.max(0, Math.min(100, pct))}%`;
+    if (jobId && jobId !== this._progJob) { this._progJob = jobId; this._progPct = 0; }
+    const p = Math.max(0, Math.min(100, Number(pct) || 0));
+    this._progPct = Math.max(this._progPct || 0, p);
+    document.getElementById('progress-bar').style.width = `${this._progPct}%`;
     document.getElementById('progress-stage').textContent = stage || '';
     document.getElementById('progress-msg').textContent = msg || '';
   },

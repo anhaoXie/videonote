@@ -34,3 +34,7 @@ safetensors>=0.8
 # ---- 其他可选 ----
 # genanki>=0.13                # 导出 Anki 牌组（.apkg，带音频）
 # rapidocr-onnxruntime>=1.3    # 画面硬字幕 OCR（中英），CPU 友好
+
+# ---- 字幕/译文规范化 ----
+# 繁 -> 简的确定性兜底：不依赖大模型"听话"，模型吐繁体也照样出简体字幕
+opencc-python-reimplemented>=0.1
