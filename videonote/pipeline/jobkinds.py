@@ -71,6 +71,15 @@ register_job_kind(
     label="翻译成双语字幕",
 )
 
+# 只重新生成字幕文件：改完转写文本 / 译文之后用它刷新 SRT/VTT，
+# 不重跑 ASR（否则一小时视频要再等一两小时）。
+register_job_kind(
+    "subtitles",
+    ["subtitles"],
+    description="用已有转写重新生成 SRT/VTT（不重跑语音识别）",
+    label="重新生成字幕",
+)
+
 # 说话人分离（美剧/访谈：分清谁在说话）
 register_job_kind(
     "diarize",

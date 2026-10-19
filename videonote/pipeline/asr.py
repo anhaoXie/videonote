@@ -7,6 +7,7 @@ from typing import Any, Dict
 from .. import db
 from ..core.registry import register_stage
 from ..core.stages import Stage, StageContext
+from ..core.zh import to_simplified
 from ..providers.base import get_asr_provider
 
 
@@ -34,6 +35,13 @@ class ASRStage(Stage):
         # 后处理：合并过短/重复的碎句，句子更适合跟读
         tr.segments = _tidy(tr.segments)
 
+        # 繁简归一。这是**真正**的源头：Whisper 转中文时经常直接输出繁体
+        # （「上網站」「老師聽說」），字幕文本就来自这里，跟翻译阶段无关。
+        # 放在 ASR 出口做一次，下游的转写视图 / 字幕 / 笔记 / Anki 导出全都干净。
+        fixed = _normalize_zh(tr.segments)
+        if fixed:
+            ctx.log(f"{fixed} 句识别结果含繁体字，已统一为简体", "warn")
+
         ctx.save_json("transcript", tr.to_dict(), "transcript.json",
                       meta={"language": tr.language, "segments": len(tr.segments),
                             "provider": tr.provider, "model": tr.model})
@@ -51,6 +59,25 @@ class ASRStage(Stage):
         ctx.set_progress(100, f"识别完成：{len(tr.segments)} 句 / 语言 {tr.language or '未知'}")
         return {"segments": len(tr.segments), "language": tr.language, "provider": tr.provider,
                 "model": tr.model, "duration": tr.duration}
+
+
+def _normalize_zh(segments: list) -> int:
+    """把识别结果里的繁体统一成简体，返回被改动的句数。
+
+    连词级时间戳（words）一起转 —— 否则「按说话人拆句」是拿 words 拼句子，
+    会把繁体又拼回来。英文内容经过转换是原样返回，不会被动到。
+    """
+    n = 0
+    for s in segments:
+        raw = s.text or ""
+        simp = to_simplified(raw)
+        if simp != raw:
+            s.text = simp
+            n += 1
+        for w in (getattr(s, "words", None) or []):
+            if isinstance(w, dict) and isinstance(w.get("word"), str):
+                w["word"] = to_simplified(w["word"])
+    return n
 
 
 def _tidy(segments: list, max_gap: float = 0.9, max_dur: float = 12.0, min_dur: float = 0.35) -> list:

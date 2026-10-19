@@ -31,7 +31,8 @@ class SubtitlesStage(Stage):
 
         cues: List[Dict[str, Any]] = []
         for s in segs:
-            text = (s.get("text") or "").strip()
+            # 主板文字也可能带繁体（中文视频的转写直接来自 ASR），这里同样归一。
+            text = to_simplified((s.get("text") or "").strip())
             # 最后一道保险：译文落地成字幕前再转一次简体。
             # 老项目里已经存着繁体 translation.json，重跑字幕也会被这里纠正。
             zh = to_simplified((translation.get(str(s.get("idx"))) or "").strip())
