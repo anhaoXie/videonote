@@ -255,13 +255,30 @@ def _voice_for(text: str) -> str:
     return "cmn" if re.search(r"[\u4e00-\u9fff]", text or "") else "en-us"
 
 
-def tts_line(line: Line, out_wav: Path, wpm: int = 150, voice: str = "") -> Path:
-    import soundfile as sf
+_WARNED = {"espeak": False}
 
+
+def tts_line(line: Line, out_wav: Path, wpm: int = 150, voice: str = "") -> Path:
+    """一句口播 -> 一段 wav。
+
+    首选 Windows 离线语音（中文音质明显好于 espeak，且不依赖网络）；
+    不可用时退回 espeak-ng。
+    """
     from ..core import tts as TTS
 
+    p = TTS.synth_windows(line.say, out_wav, wpm=wpm)
+    if p is not None:
+        return p
+
+    if not _WARNED["espeak"]:
+        print("    [提示] Windows 离线语音不可用，本次改用 espeak 兜底（中文音质明显较差）")
+        print("           自查：.venv\\Scripts\\python.exe tools\\test_voices.py")
+        _WARNED["espeak"] = True
+
+    import soundfile as sf
+
     if not TTS.available():
-        raise RuntimeError("本地 TTS 不可用（espeak-ng 缺失）")
+        raise RuntimeError("配音失败：Windows 语音与 espeak 都不可用")
     samples = TTS.synth(line.say, wpm=wpm, voice=voice or _voice_for(line.say))
     if samples is None or len(samples) == 0:
         raise RuntimeError(f"配音失败（空音频）：{line.say[:24]}")

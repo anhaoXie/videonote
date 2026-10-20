@@ -188,3 +188,201 @@ def ensure_word(word: str, wpm: int = DEFAULT_WPM) -> Optional[Path]:
 def wave_samples(path: Path) -> List[float]:
     a = _read_wav(path)
     return [] if a is None else a.tolist()
+
+
+# ---------------------------------------------------------------------------
+# Windows 离线语音（SAPI5）
+#
+# 为什么加这一层：espeak 读中文是明显的机器音；而在线方案 edge-tts 在本机被
+# 微软服务端以 403 拒绝（已核对本机时钟与服务器 Date 头完全一致，不是时间偏差，
+# 是客户端/区域限制）。Windows 自带的 zh-CN 语音（Huihui/Yaoyao/Kangkang）
+# 完全离线、音质明显好于 espeak，所以作为课程视频的首选，espeak 退为兜底。
+# ---------------------------------------------------------------------------
+
+_SAPI_SCRIPT = r"""
+$ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName System.Speech
+$t = [System.IO.File]::ReadAllText('{text_file}', [System.Text.Encoding]::UTF8)
+$s = New-Object System.Speech.Synthesis.SpeechSynthesizer
+$want = '{lang}'
+$v = $s.GetInstalledVoices() | Where-Object {{ $_.VoiceInfo.Culture.Name -like "$want*" }} | Select-Object -First 1
+if (-not $v) {{ exit 2 }}
+$s.SelectVoice($v.VoiceInfo.Name)
+$s.Rate = {rate}
+$s.SetOutputToWaveFile('{out_file}')
+$s.Speak($t)
+$s.Dispose()
+"""
+
+
+def _sapi_rate(wpm: int) -> int:
+    """wpm -> SAPI 的 -10..10 语速刻度（150 wpm ≈ 0）。"""
+    try:
+        return max(-10, min(10, int(round((int(wpm) - 150) / 15.0))))
+    except Exception:  # noqa: BLE001
+        return 0
+
+
+def sapi_voices() -> List[str]:
+    """列出可用语音，形如 'Microsoft Huihui Desktop [zh-CN]'。"""
+    import subprocess
+
+    try:
+        r = subprocess.run(
+            [
+                "powershell", "-NoProfile", "-Command",
+                "Add-Type -AssemblyName System.Speech; "
+                "(New-Object System.Speech.Synthesis.SpeechSynthesizer)"
+                ".GetInstalledVoices() | ForEach-Object "
+                "{ $_.VoiceInfo.Name + ' [' + $_.VoiceInfo.Culture.Name + ']' }",
+            ],
+            capture_output=True, text=True, timeout=120, encoding="utf-8", errors="replace",
+        )
+        if r.returncode != 0:
+            return []
+        return [ln.strip() for ln in (r.stdout or "").splitlines() if ln.strip()]
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def _synth_windows_ps(text: str, out_wav, wpm: int = DEFAULT_WPM, lang: str = "") -> Optional[Path]:
+    """[兜底] 通过 powershell 脚本调 SAPI5。
+
+    注意：从 Python 派生 powershell 后，SAPI 的 SelectVoice 在本机可能报
+    「没有安装该语音」（同一条脚本在标准 PowerShell 里正常），所以这只作兜底，
+    首选是进程内 COM 的 _synth_sapi_com。
+    """
+    import re
+    import shutil
+    import subprocess
+    import uuid
+
+    text = (text or "").strip()
+    if not text:
+        return None
+    if not lang:
+        lang = "zh" if re.search(r"[\u4e00-\u9fff]", text) else "en"
+
+    out = Path(out_wav).resolve()
+    out.parent.mkdir(parents=True, exist_ok=True)
+    # 注意：本机 tempfile.gettempdir() 会返回当前目录，临时脚本会落到项目根，
+    # 所以显式建在 data/_tmp 下，用完即删。
+    tmpdir = Path(getattr(settings, "data_dir", Path("data"))) / "_tmp" / ("sapi_" + uuid.uuid4().hex)
+    try:
+        tmpdir.mkdir(parents=True, exist_ok=True)
+        text_file = tmpdir / "in.txt"
+        text_file.write_text(text, encoding="utf-8")
+        script = tmpdir / "run.ps1"
+        # 必须带 BOM：PowerShell 5.1 读无 BOM 的 .ps1 会按 ANSI/GBK 解码，
+        # 脚本里的中文路径会变成乱码，导致「找不到路径」。
+        script.write_text(
+            _SAPI_SCRIPT.format(
+                text_file=str(text_file),
+                out_file=str(out),
+                lang=lang,
+                rate=_sapi_rate(wpm),
+            ),
+            encoding="utf-8-sig",
+        )
+        r = subprocess.run(
+            ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(script)],
+            capture_output=True, text=True, timeout=180, encoding="utf-8", errors="replace",
+        )
+        if r.returncode != 0:
+            return None
+        if not out.exists() or out.stat().st_size < 2000:
+            return None
+        return out
+    except Exception:  # noqa: BLE001
+        return None
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+_SAPI_READY = {"tried": False, "ok": False}
+
+
+def _ensure_speechlib() -> bool:
+    """加载 SAPI 类型库。
+
+    comtypes 必须先 GetModule 拿到 ISpeechVoice/ISpeechFileStream 的强类型接口，
+    否则给 AudioOutputStream 赋值会直接抛 COM 错误。
+    """
+    if _SAPI_READY["tried"]:
+        return _SAPI_READY["ok"]
+    _SAPI_READY["tried"] = True
+    try:
+        import comtypes.client as cc
+    except Exception:  # noqa: BLE001
+        return False
+    for dll in (r"C:\Windows\System32\Speech\Common\sapi.dll", "sapi.dll"):
+        try:
+            cc.GetModule(dll)
+            _SAPI_READY["ok"] = True
+            break
+        except Exception:  # noqa: BLE001
+            continue
+    return _SAPI_READY["ok"]
+
+
+def _synth_sapi_com(text: str, out_wav, wpm: int = DEFAULT_WPM, lang: str = "") -> Optional[Path]:
+    """进程内调用 SAPI5（COM）把 text 合成到 out_wav。
+
+    - 中文文本自动选中文语音、英文选英文语音；选不到同类就返回 None，不冒充。
+    - 输出为标准 WAV（这些语音默认 22050Hz 单声道），ffmpeg 可直接当音轨。
+    """
+    import re
+
+    text = (text or "").strip()
+    if not text:
+        return None
+    if not _ensure_speechlib():
+        return None
+    import comtypes.client as cc
+
+    if not lang:
+        lang = "zh" if re.search(r"[\u4e00-\u9fff]", text) else "en"
+    # LCID 低 10 位是主语言：0x04=中文，0x09=英文
+    primary = 0x04 if lang == "zh" else 0x09
+    rate = _sapi_rate(wpm)
+
+    out = Path(out_wav).resolve()
+    out.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        voice = cc.CreateObject("SAPI.SpVoice")
+        tokens = voice.GetVoices()
+        picked = None
+        for i in range(tokens.Count):
+            tok = tokens.Item(i)
+            try:
+                lcid = int(tok.GetAttribute("Language"), 16)
+            except Exception:  # noqa: BLE001
+                continue
+            if (lcid & 0x3FF) == primary:
+                picked = tok
+                break
+        if picked is None:
+            return None
+        voice.Voice = picked
+        voice.Rate = rate
+        stream = cc.CreateObject("SAPI.SpFileStream")
+        stream.Open(str(out), 3, False)  # 3 = SSFMCreateForWrite
+        voice.AudioOutputStream = stream
+        voice.Speak(text, 0)  # 0 = 同步
+        stream.Close()
+        if not out.exists() or out.stat().st_size < 2000:
+            return None
+        return out
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def synth_windows(text: str, out_wav, wpm: int = DEFAULT_WPM, lang: str = "") -> Optional[Path]:
+    """用 Windows 自带语音合成到 out_wav，返回路径；不可用返回 None。
+
+    优先进程内 COM；失败再退回 PowerShell 脚本兜底。
+    """
+    p = _synth_sapi_com(text, out_wav, wpm=wpm, lang=lang)
+    if p is not None:
+        return p
+    return _synth_windows_ps(text, out_wav, wpm=wpm, lang=lang)
