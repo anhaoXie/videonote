@@ -10,6 +10,7 @@ import './js/features/transcript.js';
 import './js/features/notes.js';
 import './js/features/frames.js';
 import './js/features/clips.js';
+import './js/features/course.js';
 import './js/features/review.js';
 import './js/features/words.js';
 import './js/features/stats.js';

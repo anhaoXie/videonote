@@ -14,7 +14,7 @@ from .. import __version__, db
 from ..config import settings
 from ..core.jobs import worker
 from ..core.registry import registry
-from . import routes_jobs, routes_media, routes_projects, routes_system
+from . import routes_course, routes_jobs, routes_media, routes_projects, routes_system
 
 
 @asynccontextmanager
@@ -52,6 +52,7 @@ def create_app() -> FastAPI:
     api.include_router(routes_projects.router)
     api.include_router(routes_jobs.router)
     api.include_router(routes_media.router)
+    api.include_router(routes_course.router)
     app.include_router(api)
 
     # 前端静态资源一律不缓存：这是本机工具，性能无所谓，

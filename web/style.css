@@ -266,3 +266,22 @@ td.txt{max-width:520px}
 .ph-legend{font-size:11.5px;margin-top:8px}
 .ph-legend>span{margin:0 4px}
 .ph-mini{display:inline-block;border-radius:5px;padding:0 4px;font-size:11px;background:var(--bg3);margin-right:3px}
+
+/* ---------------------------------------------------------------------------
+   课程工坊
+   深色主题下，页面没有给原生 input 上样式，默认是白底；
+   而文字继承的是浅色，结果「白底 + 浅字」= 看不见。这里补一套深色皮。
+   --------------------------------------------------------------------------- */
+.course-ui input[type="number"] {
+  width: 64px;
+  background: #0f1218;
+  color: #e6e9ef;
+  border: 1px solid #2b3140;
+  border-radius: 6px;
+  padding: 4px 6px;
+  font-size: 14px;
+}
+.course-ui input[type="number"]:focus {
+  outline: none;
+  border-color: #5b8def;
+}

@@ -57,7 +57,14 @@ class Worker:
         try:
             if db.is_canceled(jid):
                 raise StageCanceled()
-            result = self.runner.run_job(job)
+            if str(job.get("kind") or "").startswith("course"):
+                # 课程生成不隶属于项目，走独立执行器；
+                # 排队、取消、进度、日志仍复用同一套机制。
+                from . import course_jobs
+
+                result = course_jobs.run(job)
+            else:
+                result = self.runner.run_job(job)
             db.update_job(jid, status=JobStatus.DONE, progress=100, message="完成",
                           result=result, finished_at=now_iso())
             if pid:
