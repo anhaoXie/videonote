@@ -56,17 +56,22 @@ ui.registerTab({
       if (!host) return;
       try {
         const data = await api.get('/api/course/list');
-        const items = data.items || [];
-        if (!items.length) {
+        const courses = data.courses || [];
+        if (!courses.length) {
           host.innerHTML = '<span class="muted">还没有生成任何课程视频</span>';
           return;
         }
-        host.innerHTML = items.map((it) => `
-          <div class="row" style="justify-content:space-between;align-items:center;
-               border-bottom:1px solid #eee;padding:8px 0">
-            <div><b>${esc(it.episode)}</b> <span class="muted">${it.size_mb} MB</span></div>
-            <a class="btn" target="_blank" rel="noopener"
-               href="/api/course/video?ep=${encodeURIComponent(it.episode)}">播放 / 下载</a>
+        host.innerHTML = courses.map((c) => `
+          <div style="border-bottom:1px solid #2b3140;padding:10px 0">
+            <div style="margin-bottom:6px">
+              <b>${esc(c.title)}</b>
+              <span class="muted"> · ${esc(c.created_at)} · ${c.count} 集</span>
+            </div>
+            <div>${(c.episodes || []).map((e) => `
+              <a class="btn" style="margin:0 6px 6px 0" target="_blank" rel="noopener"
+                 href="/api/course/video?course=${encodeURIComponent(c.id)}&ep=${encodeURIComponent(e.episode)}"
+                 title="${esc(e.title || '')}">${esc(e.episode)} · ${e.size_mb}MB</a>`).join('')}
+            </div>
           </div>`).join('');
       } catch (e) {
         host.innerHTML = `<span class="muted">读取失败：${esc(String(e.message || e))}</span>`;

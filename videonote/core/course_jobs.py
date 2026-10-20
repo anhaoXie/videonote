@@ -53,7 +53,10 @@ def run(job: dict) -> Dict[str, Any]:
         raise RuntimeError(f"大纲里没有第 {only} 集")
 
     title = outline.get("title") or "未命名课程"
-    db.add_log(jid, f"课程大纲：{title}，共 {len(targets)} 集待生成", "info")
+    # 每次生成一个独立目录，避免按集号互相覆盖
+    course_dir = CG.new_course_dir(out_root, title)
+    db.add_log(jid, f"课程大纲：{title}，共 {len(targets)} 集待生成（目录 {course_dir.name}）", "info")
+    made: list = []
 
     done = []
     total = len(targets)
@@ -68,20 +71,29 @@ def run(job: dict) -> Dict[str, Any]:
 
         prog(base * 100 + 1, f"[{i}/{total}] 第 {no} 集：{e.get('title', '')}")
         try:
-            info = CG.make_episode(e, out_root / f"ep{no:02d}", source=source,
+            info = CG.make_episode(e, course_dir / f"ep{no:02d}", source=source,
                                    wpm=wpm, progress=sub)
             info["episode"] = no
             info["title"] = e.get("title", "")
             done.append(info)
+            made.append({
+                "no": no,
+                "title": e.get("title", ""),
+                "file": f"ep{no:02d}/episode.mp4",
+                "seconds": info.get("seconds"),
+            })
         except Exception as exc:  # noqa: BLE001
             # 单集失败不拖垮整批，但要在日志里留证据
             db.add_log(jid, f"第 {no} 集失败：{type(exc).__name__}: {exc}", "error")
             done.append({"episode": no, "title": e.get("title", ""),
                          "error": f"{type(exc).__name__}: {exc}"})
+        # 每完成一集就把清单落盘：中途中断也能看到已完成的部分
+        CG.write_manifest(course_dir, title, source, made)
 
     ok = [d for d in done if d.get("video")]
     return {
         "course": title,
+        "course_dir": course_dir.name,
         "episodes": done,
         "count": len(done),
         "ok": len(ok),

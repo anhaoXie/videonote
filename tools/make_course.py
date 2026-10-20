@@ -100,6 +100,9 @@ def main() -> int:
             print(f"\n{where}")
             return 1
 
+        course_dir = CG.new_course_dir(out_root)
+        print(f"\n输出目录：{course_dir}")
+
         print(f"\n=== 2) 生成 {'全部 ' + str(len(targets)) + ' 集' if args.all_eps else '第 ' + str(args.only) + ' 集'} ===")
         results = []
         for i, e in enumerate(targets, 1):
@@ -108,13 +111,22 @@ def main() -> int:
             print(f"\n--- [{i}/{len(targets)}] 第 {no} 集：{e.get('title', '')} ---")
             try:
                 results.append(
-                    CG.make_episode(e, out_root / f"ep{no:02d}", source=src,
+                    CG.make_episode(e, course_dir / f"ep{no:02d}", source=src,
                                     wpm=args.wpm, progress=show)
                 )
             except Exception as exc:  # noqa: BLE001
                 # 单集失败不能拖垮整批——已经生成的集数要保住
                 print(f"  ❌ 第 {no} 集失败：{type(exc).__name__}: {exc}（继续下一集）")
                 results.append({"episode": no, "error": f"{type(exc).__name__}: {exc}"})
+
+        # 写课程清单（界面靠它列出课程与各集）
+        made = [
+            {"no": int(e.get("no", i)), "title": e.get("title", ""),
+             "file": f"ep{int(e.get('no', i)):02d}/episode.mp4"}
+            for i, e in enumerate(targets, 1)
+            if (course_dir / f"ep{int(e.get('no', i)):02d}" / "episode.mp4").exists()
+        ]
+        CG.write_manifest(course_dir, outline.get("title", ""), src, made)
 
         if len(results) == 1:
             info = results[0]

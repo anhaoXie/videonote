@@ -1,7 +1,12 @@
 # -*- coding: utf-8 -*-
-"""课程视频接口：文本/主题 -> 分集教学视频。"""
+"""课程视频接口：文本/主题 -> 分集教学视频。
+
+产出布局：data/courses/<课程id>/course.json + epNN/episode.mp4
+每次生成一个独立课程目录，避免按集号互相覆盖。
+"""
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 from typing import Optional
@@ -17,6 +22,7 @@ router = APIRouter(tags=["course"])
 
 COURSE_ROOT = Path("data/courses")
 EP_RE = re.compile(r"^ep\d{2,3}$")
+COURSE_RE = re.compile(r"^c[0-9a-zA-Z\-_]{4,40}$")
 
 
 class CourseIn(BaseModel):
@@ -39,28 +45,58 @@ def build_course(body: CourseIn):
 
 @router.get("/course/list")
 def list_courses():
-    """列出已生成的成片（按集号）。"""
-    items = []
-    if COURSE_ROOT.exists():
-        for d in sorted(COURSE_ROOT.glob("ep*")):
-            mp4 = d / "episode.mp4"
+    """列出所有课程及其成片（按 course.json 清单，新的在前）。"""
+    courses = []
+    if not COURSE_ROOT.exists():
+        return {"courses": courses}
+
+    for d in sorted(COURSE_ROOT.iterdir(), reverse=True):
+        if not d.is_dir():
+            continue
+        man = d / "course.json"
+        if not man.exists():
+            continue
+        try:
+            meta = json.loads(man.read_text(encoding="utf-8"))
+        except Exception:  # noqa: BLE001
+            continue
+
+        eps = []
+        for e in meta.get("episodes") or []:
+            rel = str(e.get("file") or "")
+            if not rel:
+                rel = f"ep{int(e.get('no') or 0):02d}/episode.mp4"
+            mp4 = d / rel
             if not mp4.exists():
                 continue
-            st = mp4.stat()
-            items.append({
-                "episode": d.name,
-                "size_mb": round(st.st_size / 1048576, 2),
-                "mtime": int(st.st_mtime),
+            eps.append({
+                "no": e.get("no"),
+                "title": e.get("title", ""),
+                "episode": mp4.parent.name,
+                "size_mb": round(mp4.stat().st_size / 1048576, 2),
+                "seconds": e.get("seconds"),
             })
-    return {"items": items}
+
+        courses.append({
+            "id": d.name,
+            "title": meta.get("title") or d.name,
+            "created_at": meta.get("created_at", ""),
+            "count": len(eps),
+            "episodes": eps,
+        })
+    return {"courses": courses}
 
 
 @router.get("/course/video")
-def course_video(ep: str):
-    """播放/下载某一集的成片。"""
-    if not EP_RE.match(ep or ""):
-        raise HTTPException(400, "集号格式不对")
-    mp4 = (COURSE_ROOT / ep / "episode.mp4").resolve()
+def course_video(course: str, ep: str):
+    """播放/下载某一集成片。"""
+    if not COURSE_RE.match(course or "") or not EP_RE.match(ep or ""):
+        raise HTTPException(400, "参数格式不对")
+    base = COURSE_ROOT.resolve()
+    mp4 = (base / course / ep / "episode.mp4").resolve()
+    # 解析后必须仍在课程根目录之下（防 ../ 穿越）
+    if base not in mp4.parents:
+        raise HTTPException(400, "非法路径")
     if not mp4.exists():
         raise HTTPException(404, "这一集还没生成")
-    return FileResponse(str(mp4), media_type="video/mp4", filename=f"{ep}.mp4")
+    return FileResponse(str(mp4), media_type="video/mp4", filename=f"{course}-{ep}.mp4")

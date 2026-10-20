@@ -344,6 +344,47 @@ def probe(path: Path) -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 # 5. 一集 = 一条视频
 # ---------------------------------------------------------------------------
+def new_course_dir(root: Path, title: str = "") -> Path:
+    """为一次生成分配**独立**的课程目录。
+
+    以前按集号直接落盘（data/courses/ep01），换个主题重跑就会覆盖同名集；
+    现在每次生成一个 c<时间戳> 目录，互不干扰。
+    """
+    import time
+
+    root = Path(root)
+    root.mkdir(parents=True, exist_ok=True)
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    cid = f"c{stamp}"
+    n = 1
+    while (root / cid).exists():
+        n += 1
+        cid = f"c{stamp}-{n}"
+    d = root / cid
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def write_manifest(course_dir: Path, title: str, source: str = "",
+                   episodes: Optional[List[Dict[str, Any]]] = None) -> Path:
+    """写 course.json：界面靠它列出「哪些课程、各有哪些集」。"""
+    import json
+    import time
+
+    course_dir = Path(course_dir)
+    course_dir.mkdir(parents=True, exist_ok=True)
+    meta = {
+        "id": course_dir.name,
+        "title": title or course_dir.name,
+        "created_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "source_preview": (source or "").strip()[:200],
+        "episodes": episodes or [],
+    }
+    p = course_dir / "course.json"
+    p.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+    return p
+
+
 def make_episode(episode: Dict[str, Any], workdir: Path, source: str = "",
                  wpm: int = 150, progress=None,
                  lines: Optional[List[Line]] = None) -> Dict[str, Any]:
