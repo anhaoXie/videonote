@@ -8,8 +8,8 @@
     # 用一段文本/主题生成大纲，再做第 1 集
     .\\.venv\\Scripts\\python.exe tools\\make_course.py --topic "间隔重复为什么有效" --episodes 3 --only 1
 
-    # 用一整个文本文件当素材
-    .\\.venv\\Scripts\\python.exe tools\\make_course.py --file book.txt --episodes 6 --only 2
+    # 用一整个文本文件当素材，一次生成全集
+    .\\.venv\\Scripts\\python.exe tools\\make_course.py --file book.txt --episodes 6 --all
 
 产出：data/courses/<集号>/episode.mp4
 """
@@ -56,6 +56,8 @@ def main() -> int:
     ap.add_argument("--file", default="", help="素材文本文件路径")
     ap.add_argument("--episodes", type=int, default=3, help="分成几集")
     ap.add_argument("--only", type=int, default=1, help="只生成第几集")
+    ap.add_argument("--all", action="store_true", dest="all_eps",
+                    help="生成大纲里的全部集（某一集失败不中断整批）")
     ap.add_argument("--minutes", type=int, default=3, help="每集目标时长（分钟）")
     ap.add_argument("--wpm", type=int, default=150, help="配音语速")
     ap.add_argument("--out", default="data/courses", help="输出目录")
@@ -87,16 +89,43 @@ def main() -> int:
         for e in outline.get("episodes") or []:
             print(f"  第 {e.get('no')} 集 · {e.get('title', '')}  —— {e.get('goal', '')}")
 
-        ep = next((e for e in (outline.get("episodes") or [])
-                   if int(e.get("no", 0)) == args.only), None)
-        if not ep:
-            print(f"\n没有第 {args.only} 集（大纲里只有 {len(outline.get('episodes') or [])} 集）")
-            return 1
-        ep["course"] = outline.get("title", "")
+        eps = outline.get("episodes") or []
+        if args.all_eps:
+            targets = eps
+        else:
+            targets = [e for e in eps if int(e.get("no", 0)) == args.only]
 
-        print(f"\n=== 2) 生成第 {args.only} 集 ===")
-        info = CG.make_episode(ep, out_root / f"ep{args.only:02d}", source=src,
-                               wpm=args.wpm, progress=show)
+        if not targets:
+            where = "大纲为空" if not eps else f"没有第 {args.only} 集（大纲共 {len(eps)} 集）"
+            print(f"\n{where}")
+            return 1
+
+        print(f"\n=== 2) 生成 {'全部 ' + str(len(targets)) + ' 集' if args.all_eps else '第 ' + str(args.only) + ' 集'} ===")
+        results = []
+        for i, e in enumerate(targets, 1):
+            no = int(e.get("no", i))
+            e["course"] = outline.get("title", "")
+            print(f"\n--- [{i}/{len(targets)}] 第 {no} 集：{e.get('title', '')} ---")
+            try:
+                results.append(
+                    CG.make_episode(e, out_root / f"ep{no:02d}", source=src,
+                                    wpm=args.wpm, progress=show)
+                )
+            except Exception as exc:  # noqa: BLE001
+                # 单集失败不能拖垮整批——已经生成的集数要保住
+                print(f"  ❌ 第 {no} 集失败：{type(exc).__name__}: {exc}（继续下一集）")
+                results.append({"episode": no, "error": f"{type(exc).__name__}: {exc}"})
+
+        if len(results) == 1:
+            info = results[0]
+        else:
+            ok = [r for r in results if r.get("video")]
+            info = {
+                "count": len(results),
+                "ok": len(ok),
+                "seconds": round(sum(r.get("seconds", 0) for r in ok), 1),
+                "episodes": results,
+            }
 
     elapsed = time.time() - t0
     print("\n=== 结果 ===")
