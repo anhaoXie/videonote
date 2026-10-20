@@ -51,6 +51,36 @@ export const api = {
   transcript(pid) { return this.get(`/api/projects/${pid}/transcript`); },
   rawUrl(pid) { return `/api/projects/${pid}/raw`; },
   artifactUrl(pid, key, download = false) { return `/api/projects/${pid}/artifact/${key}${download ? '?download=true' : ''}`; },
+  // 下载产出文件。
+  // 为什么不用 window.open()：本应用跑在 webview 里，window.open 会试图把
+  // 「附件下载地址」当成网页去导航；webview 渲染不了 attachment，就显示白屏
+  // 「页面加载失败」。改成 fetch + Blob + <a download>，全程不导航，
+  // 文件名从 Content-Disposition 里取，失败时给明确提示而不是白屏。
+  async downloadArtifact(pid, key, filename) {
+    try {
+      const res = await fetch(this.artifactUrl(pid, key, true));
+      if (!res.ok) {
+        throw new Error(res.status === 404 ? '这个文件还没生成（先跑一次分析）' : `HTTP ${res.status}`);
+      }
+      const cd = res.headers.get('content-disposition') || '';
+      const m = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(cd);
+      const name = filename || (m ? decodeURIComponent(m[1]) : `${key}.txt`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 3000);
+      ui.toast(`已开始下载 ${name}`, 'ok', 3000);
+      return true;
+    } catch (e) {
+      ui.toast(`下载失败：${e.message}`, 'err', 8000);
+      return false;
+    }
+  },
   frameUrl(pid, idx) { return `/api/projects/${pid}/frames/${idx}/image`; },
 };
 

@@ -111,8 +111,8 @@ ui.registerTab({
     panel.querySelector('#t-q').oninput = (e) => { keyword = e.target.value; draw(); };
     const spk = panel.querySelector('#t-spk');
     if (spk) spk.onchange = (e) => { speakerFilter = e.target.value; draw(); };
-    panel.querySelector('#t-export').onclick = () => window.open(api.artifactUrl(pid, 'subtitles_srt', true), '_blank');
-    panel.querySelector('#t-export-vtt').onclick = () => window.open(api.artifactUrl(pid, 'subtitles_vtt', true), '_blank');
+    panel.querySelector('#t-export').onclick = () => api.downloadArtifact(pid, 'subtitles_srt');
+    panel.querySelector('#t-export-vtt').onclick = () => api.downloadArtifact(pid, 'subtitles_vtt');
     draw();
     on('segChanged', ({ idx }) => markActive(idx));
   },

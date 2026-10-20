@@ -83,7 +83,7 @@ ui.registerTab({
       </div>`;
 
     panel.querySelectorAll('[data-key]').forEach((el) => {
-      el.onclick = () => window.open(api.artifactUrl(p.id, el.dataset.key, true), '_blank');
+      el.onclick = () => api.downloadArtifact(p.id, el.dataset.key);
     });
     panel.querySelectorAll('[data-run]').forEach((el) => {
       el.onclick = async () => {

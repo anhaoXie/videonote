@@ -39,9 +39,13 @@ ui.registerTab({
             <div class="muted">${esc(s.one_liner || '')}</div></div>
           <div class="row">
             <button class="btn small" id="n-regen">重新生成</button>
-            <button class="btn small" id="n-dl">下载 .md</button>
-            <button class="btn small ghost" id="n-dljson">下载 .json</button>
+            <button class="btn small" id="n-copy">复制全文</button>
+            <button class="btn small" id="n-dl">下载笔记</button>
+            <button class="btn small ghost" id="n-dljson" title="给程序读的结构化数据，普通阅读不需要它">下载结构化数据</button>
           </div>
+        </div>
+        <div class="muted" style="margin-top:8px">
+          笔记是一份普通文本文件，用记事本、Word 都能打开；想直接粘贴到别处就用「复制全文」。
         </div>
       </div>
       ${s.chapters?.length ? `<div class="card"><h3>章节时间轴</h3><div class="seg-list">
@@ -70,8 +74,29 @@ ui.registerTab({
       await api.runJob(pid, 'summarize');
       ui.toast('已排队：重新生成笔记', 'ok');
     };
-    panel.querySelector('#n-dl').onclick = () => window.open(api.artifactUrl(pid, 'notes', true), '_blank');
-    panel.querySelector('#n-dljson').onclick = () => window.open(api.artifactUrl(pid, 'summary', true), '_blank');
+    panel.querySelector('#n-dl').onclick = () => api.downloadArtifact(pid, 'notes');
+    panel.querySelector('#n-dljson').onclick = () => api.downloadArtifact(pid, 'summary');
+    panel.querySelector('#n-copy').onclick = async () => {
+      const text = data.markdown || '';
+      try {
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(text);
+        } else {
+          // webview 里偶尔拿不到剪贴板权限，退回旧办法
+          const ta = document.createElement('textarea');
+          ta.value = text;
+          ta.style.position = 'fixed';
+          ta.style.opacity = '0';
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          ta.remove();
+        }
+        ui.toast(`已复制 ${text.length} 个字符，可直接粘贴`, 'ok');
+      } catch (e) {
+        ui.toast('复制失败：可以手动选中「笔记正文」再复制', 'err', 8000);
+      }
+    };
   },
 });
 

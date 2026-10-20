@@ -206,7 +206,7 @@ function draw(panel) {
       try {
         const r = await api.post(`/api/projects/${pid}/clips/export`, {});
         ui.toast(`已生成 Anki 牌组（${r.clips} 张卡，${r.kind}）`, 'ok', 6000);
-        window.open(api.artifactUrl(pid, 'anki_deck', true), '_blank');
+        api.downloadArtifact(pid, 'anki_deck');
       } catch (err) {
         ui.toast(`导出失败：${esc(err.message)}`, 'err', 6000);
       } finally {
