@@ -387,7 +387,8 @@ def write_manifest(course_dir: Path, title: str, source: str = "",
 
 def make_episode(episode: Dict[str, Any], workdir: Path, source: str = "",
                  wpm: int = 150, progress=None,
-                 lines: Optional[List[Line]] = None) -> Dict[str, Any]:
+                 lines: Optional[List[Line]] = None,
+                 cartoon: bool = True) -> Dict[str, Any]:
     workdir = Path(workdir).resolve()
     workdir.mkdir(parents=True, exist_ok=True)
     course_title = episode.get("course", "")
@@ -407,32 +408,47 @@ def make_episode(episode: Dict[str, Any], workdir: Path, source: str = "",
 
     out = workdir / "episode.mp4"
     concat(segs, out)
+
+    if cartoon:
+        if progress:
+            progress(97, "合成卡通讲解员")
+        plain = workdir / "episode_plain.mp4"
+        try:
+            from . import cartoon as C
+
+            out.replace(plain)
+            C.apply_to_video(plain, out, fps=FPS, size=384, margin=36)
+            plain.unlink(missing_ok=True)
+        except Exception as exc:  # noqa: BLE001
+            # 讲解员只是装饰层：失败也必须保住整集
+            print(f"    [提示] 讲解员合成失败，保留无讲解员版本：{exc}")
+            if plain.exists():
+                plain.replace(out)
+
     info = probe(out)
-    info.update({"lines": len(lines), "path": str(out)})
+    info.update({"lines": len(lines), "path": str(out), "cartoon": bool(cartoon)})
     return info
 
 
 # ---------------------------------------------------------------------------
-# 6. 数字人（照片级口型）—— 独立一层，先留接口
+# 6. 讲解员（2D 卡通）
+#
+# 曾经试过照片级口型（Wav2Lip），**已放弃**，原因记在这里免得有人再走一遍：
+#   1. 它必须有真人照片。用户不上传就没有头像 —— 产品最关键的入口不能留空。
+#   2. 96×96 的嘴部生成器贴回大图后糊且「半真半假」，实测成片观感很糟。
+#   3. 网上图有版权风险，而且平面图不会眨眼。
+# 现在用 videonote/core/cartoon.py：纯程序绘制的扁平卡通讲师，
+# 无需任何上传，能眨眼 / 按配音对口型 / 轻微呼吸。
 # ---------------------------------------------------------------------------
-AVATAR_HOOK = """
-数字人这一层刻意不做进主链路。接入时的形状是：
-    avatar_clip(portrait_png, audio_wav, out_mp4) -> Path
-然后把 build_segment 的「静态图」换成「口型视频」，其余不变。
-
-照片级口型的现实成本（纯 CPU，8 线程）：
-    - 需要 face_alignment + Wav2Lip 权重（约 400MB，走 hf-mirror）
-    - 3 分钟视频约 15–40 分钟推理；一季 10 集 = 一整晚
-    - Wav2Lip 只重绘 96x96 的嘴部区域，大画面上偏糊；
-      正片里建议做成「右下角小窗讲师」，观感最稳
-"""
 
 
 def avatar_available() -> bool:
+    """讲解员是否可用（纯 Pillow 绘制，装了 Pillow 就行）。"""
     try:
-        import face_alignment  # noqa: F401
+        from PIL import Image  # noqa: F401
+
         return True
-    except Exception:
+    except Exception:  # noqa: BLE001
         return False
 
 

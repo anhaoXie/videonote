@@ -37,6 +37,7 @@ def run(job: dict) -> Dict[str, Any]:
     out_root = Path(p.get("out") or "data/courses")
     only = int(p.get("only") or 1)
     want_all = bool(p.get("all", True))
+    cartoon = bool(p.get("cartoon", True))
 
     def prog(pct: float, msg: str) -> None:
         db.update_job(jid, progress=max(0, min(99, int(pct))), message=msg)
@@ -72,7 +73,7 @@ def run(job: dict) -> Dict[str, Any]:
         prog(base * 100 + 1, f"[{i}/{total}] 第 {no} 集：{e.get('title', '')}")
         try:
             info = CG.make_episode(e, course_dir / f"ep{no:02d}", source=source,
-                                   wpm=wpm, progress=sub)
+                                   wpm=wpm, progress=sub, cartoon=cartoon)
             info["episode"] = no
             info["title"] = e.get("title", "")
             done.append(info)

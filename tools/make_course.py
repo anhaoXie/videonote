@@ -62,6 +62,8 @@ def main() -> int:
     ap.add_argument("--wpm", type=int, default=150, help="配音语速")
     ap.add_argument("--out", default="data/courses", help="输出目录")
     ap.add_argument("--demo", action="store_true", help="不调大模型，用内置 3 屏演示")
+    ap.add_argument("--no-cartoon", action="store_true", dest="no_cartoon",
+                    help="不叠卡通讲解员（只出幻灯片 + 配音）")
     args = ap.parse_args()
 
     out_root = Path(args.out)
@@ -73,7 +75,8 @@ def main() -> int:
     if args.demo:
         print("演示模式：3 屏，验证渲染 + 配音 + 合成\n")
         info = CG.make_episode(DEMO_EPISODE, out_root / "demo-auto",
-                               lines=DEMO_LINES, wpm=args.wpm, progress=show)
+                               lines=DEMO_LINES, wpm=args.wpm, progress=show,
+                               cartoon=not args.no_cartoon)
     else:
         if args.file:
             src = Path(args.file).read_text(encoding="utf-8")
@@ -112,7 +115,8 @@ def main() -> int:
             try:
                 results.append(
                     CG.make_episode(e, course_dir / f"ep{no:02d}", source=src,
-                                    wpm=args.wpm, progress=show)
+                                    wpm=args.wpm, progress=show,
+                                    cartoon=not args.no_cartoon)
                 )
             except Exception as exc:  # noqa: BLE001
                 # 单集失败不能拖垮整批——已经生成的集数要保住
