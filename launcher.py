@@ -132,37 +132,75 @@ code{background:#181c25;padding:2px 6px;border-radius:5px}
 </div>
 <script>
 var t0=Date.now(),p=document.getElementById('p'),st=document.getElementById('st');
+// 注意：这段 HTML 是通过 html= 直接塞进 WebView 的，页面没有 http 来源，
+// 因此请求与跳转**必须用绝对地址**；用 '/api/health' 会解析不到任何服务器，
+// 窗口就会永远停在启动页（这是之前「必须手动开链接」的根因之一）。
+var API='__URL__api/health', APP='__URL__';
 var timer=setInterval(function(){
   var s=(Date.now()-t0)/1000;
   p.style.width=Math.min(95, s*3)+'%';
   st.textContent='已等待 '+s.toFixed(0)+' 秒';
-  fetch('/api/health',{cache:'no-store'}).then(function(r){
+  fetch(API,{cache:'no-store'}).then(function(r){
     if(r.ok){clearInterval(timer);p.style.width='100%';st.textContent='就绪，正在进入…';
-      setTimeout(function(){location.replace('/');},300);}
+      setTimeout(function(){location.replace(APP);},300);}
   }).catch(function(){});
 },1000);
 </script></body></html>"""
 
 
-def open_native_window() -> bool:
-    """原生窗口（pywebview + WebView2）。成功返回 True，不可用返回 False。"""
+def _native_backend_ok() -> bool:
+    """pywebview 在 Windows 上依赖 pythonnet(CLR)。
+
+    本机实测：.NET Framework 4.8 在位、Python.Runtime.dll 完整，
+    但 `import clr` 报 `Failed to resolve Python.Runtime.Loader.Initialize`，
+    所以原生窗口这条路在这台机器上不可用。先探测一次，
+    不可用就直接走浏览器应用模式，别每次启动都白等几秒再失败。
+    """
+    try:
+        import clr  # noqa: F401
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def open_native_window(ready: bool = True) -> bool:
+    """原生窗口（pywebview + WebView2）。成功返回 True，不可用返回 False。
+
+    ready=True 时直接打开应用；否则先显示启动页（内含绝对 URL，见 SPLASH 的注释）。
+    """
+    if not _native_backend_ok():
+        log_note("pythonnet 不可用，跳过原生窗口")
+        return False
     try:
         import webview
     except Exception:  # noqa: BLE001
         return False
     try:
-        win = webview.create_window(
-            APP_TITLE, html=SPLASH, width=1520, height=960,
-            min_size=(1080, 700), background_color="#0b0d12",
-        )
-        kwargs = {}
+        if ready:
+            win = webview.create_window(
+                APP_TITLE, URL, width=1520, height=960,
+                min_size=(1080, 700), background_color="#0b0d12",
+                text_select=True,
+            )
+        else:
+            win = webview.create_window(
+                APP_TITLE, html=SPLASH.replace("__URL__", URL), width=1520, height=960,
+                min_size=(1080, 700), background_color="#0b0d12",
+            )
+        del win
+        # 持久化 localStorage（否则每次启动界面状态都丢）
+        base = dict(private_mode=False, storage_path=str(ROOT / "data" / "appprofile"))
         if ICON.exists():
-            kwargs["icon"] = str(ICON)
-        webview.start(**kwargs)
+            try:
+                webview.start(icon=str(ICON), **base)
+                return True
+            except TypeError:
+                # 某些版本 start() 不接受 icon，别因此退回浏览器
+                log_note("pywebview 不支持 icon 参数，改用无图标启动")
+        webview.start(**base)
         return True
     except Exception as exc:  # noqa: BLE001
-        log = LOG.parent / "launcher.log"
-        log.write_text(f"pywebview 失败，改用浏览器应用模式：{exc}\n", encoding="utf-8")
+        log_note(f"pywebview 失败，改用浏览器应用模式：{exc}")
         return False
 
 
@@ -221,6 +259,13 @@ def main() -> int:
     if args.stop:
         return stop_server()
 
+    # 先落一条日志：pythonw 没有控制台，出错是静默的，
+    # 没有这一行就无法区分「没启动」和「启动了但后面失败」。
+    log_note(
+        "launcher 启动 pid=%s ready=%s native_ok=%s"
+        % (os.getpid(), healthy(), _native_backend_ok())
+    )
+
     if not healthy():
         start_server()
         if not wait_ready():                      # 服务没起来
@@ -244,7 +289,7 @@ def main() -> int:
 
         if not args.url_only:
             def _try_native() -> None:
-                open_native_window()
+                open_native_window(ready=healthy())
 
             t = threading.Thread(target=_try_native, daemon=True)
             t.start()
@@ -262,7 +307,8 @@ def main() -> int:
         webbrowser.open(URL)
         return 0
 
-    if open_native_window():
+    # 服务已就绪就直接开应用，不再先闪一下启动页
+    if open_native_window(ready=healthy()):
         return 0
     if open_browser_app():
         return 0
