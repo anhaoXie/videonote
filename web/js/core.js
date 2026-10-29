@@ -25,6 +25,11 @@ export const api = {
       clearTimeout(timer);
     }
     if (!res.ok) {
+      // 401 = 没登录（服务端设了 VN_PASSWORD）。直接去登录页，别让界面半死不活。
+      if (res.status === 401 && !location.pathname.endsWith('/login.html')) {
+        location.replace('/login.html');
+        throw new Error('需要登录');
+      }
       let detail = res.statusText;
       try { detail = (await res.json()).detail || detail; } catch (e) { /* ignore */ }
       throw new Error(detail);

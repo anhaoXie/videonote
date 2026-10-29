@@ -14,7 +14,7 @@ from .. import __version__, db
 from ..config import settings
 from ..core.jobs import worker
 from ..core.registry import registry
-from . import routes_course, routes_jobs, routes_media, routes_projects, routes_system
+from . import auth, routes_course, routes_jobs, routes_media, routes_projects, routes_system
 
 
 @asynccontextmanager
@@ -53,7 +53,17 @@ def create_app() -> FastAPI:
     api.include_router(routes_jobs.router)
     api.include_router(routes_media.router)
     api.include_router(routes_course.router)
+    api.include_router(auth.router)
     app.include_router(api)
+
+    # 鉴权：只有配了 VN_PASSWORD 才生效（本地开发什么都不用改）。
+    # 顺序上要放在静态资源之前挂，让 /api/* 全部先过这道门。
+    @app.middleware("http")
+    async def _auth_guard(request, call_next):  # noqa: ANN001
+        blocked = auth.guard(request)
+        if blocked is not None:
+            return blocked
+        return await call_next(request)
 
     # 前端静态资源一律不缓存：这是本机工具，性能无所谓，
     # 但「浏览器拿着旧 JS → 页面点不动」这个坑必须彻底堵死。
