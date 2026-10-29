@@ -11,3 +11,8 @@ pip-*/
 pip-wheels/
 torchinductor_*/
 tmp*/
+# Chrome 截图/自动化留下的用户配置与崩溃转储（不该进公开仓库）
+vn_*_profile/
+tmp[0-9a-z]*_/
+tmp*/
+*.pma
