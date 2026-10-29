@@ -16,3 +16,6 @@ vn_*_profile/
 tmp[0-9a-z]*_/
 tmp*/
 *.pma
+
+# 隧道工具（单个 exe，约 60MB，不进仓库）
+tools/bin/
