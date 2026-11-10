@@ -86,13 +86,15 @@ class BurnSubtitleStage(Stage):
 
 # --------------------------------------------------------------------------
 def _fmt(seconds: float, sep: str = ",") -> str:
-    seconds = max(0.0, float(seconds))
-    h = int(seconds // 3600)
-    m = int((seconds % 3600) // 60)
-    s = int(seconds % 60)
-    ms = int(round((seconds - int(seconds)) * 1000))
-    if ms == 1000:
-        s, ms = s + 1, 0
+    """秒 → SRT/VTT 时间戳。
+
+    先把整段时间四舍五入到毫秒、再按毫秒拆分，避免 59.9996s 这类边界
+    被拆成 ``00:00:60,000``（旧实现只在秒上 +1，没有向分/时进位）的非法时间戳。
+    """
+    total_ms = int(round(max(0.0, float(seconds)) * 1000))
+    h, rem = divmod(total_ms, 3_600_000)
+    m, rem = divmod(rem, 60_000)
+    s, ms = divmod(rem, 1_000)
     return f"{h:02d}:{m:02d}:{s:02d}{sep}{ms:03d}"
 
 
